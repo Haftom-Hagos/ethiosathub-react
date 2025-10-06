@@ -22,12 +22,3 @@
     "vite": "^5.4.0"
   }
 }
-
-
-"homepage": "https://haftom-hagos.github.io",
-"scripts": {
-  "dev": "vite",
-  "build": "vite build",
-  "predeploy": "npm run build",
-  "deploy": "gh-pages -d dist"
-}
