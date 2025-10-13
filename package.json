@@ -5,7 +5,6 @@
   "homepage": "https://haftom-hagos.github.io",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
 	"build": "npx vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
