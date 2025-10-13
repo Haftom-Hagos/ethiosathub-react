@@ -41,12 +41,12 @@ export default function Home() {
           <ul className="grid grid-cols-1 md:grid-cols-3 gap-6 list-none p-0">
             <li className="flex gap-4 items-start bg-gray-50 p-4 rounded-md">
               <img
-                src="src/images/southern_tigray_lc_3d.png"
+                src="images/southern_tigray_lc_3d.png"
                 alt="Supervised classification"
                 width="100"
                 height="100"
                 className="w-24 h-24 object-cover rounded cursor-pointer hover:scale-105 transition-transform duration-200"
-                onClick={() => openImage("src/images/southern_tigray_lc_3d.png", "Supervised classification")}
+                onClick={() => openImage("images/southern_tigray_lc_3d.png", "Supervised classification")}
               />
               <div>
                 <h3 className="font-semibold">Supervised classification</h3>
@@ -58,12 +58,12 @@ export default function Home() {
 
             <li className="flex gap-4 items-start bg-gray-50 p-4 rounded-md">
               <img
-                src="src/images/Humera.jpg"
+                src="images/Humera.jpg"
                 alt="MLB"
                 width="100"
                 height="100"
                 className="w-24 h-24 object-cover rounded cursor-pointer hover:scale-105 transition-transform duration-200"
-                onClick={() => openImage("src/images/Humera.jpg", "MLB")}
+                onClick={() => openImage("images/Humera.jpg", "MLB")}
               />
               <div>
                 <h3 className="font-semibold">MLB</h3>
@@ -75,12 +75,12 @@ export default function Home() {
 
             <li className="flex gap-4 items-start bg-gray-50 p-4 rounded-md">
               <img
-                src="src/images/aa_stad_lidar_3d.png"
+                src="images/aa_stad_lidar_3d.png"
                 alt="Ready-to-use outputs"
                 width="100"
                 height="100"
                 className="w-24 h-24 object-cover rounded cursor-pointer hover:scale-105 transition-transform duration-200"
-                onClick={() => openImage("src/images/aa_stad_lidar_3d.png", "Ready-to-use outputs")}
+                onClick={() => openImage("images/aa_stad_lidar_3d.png", "Ready-to-use outputs")}
               />
               <div>
                 <h3 className="font-semibold">Ready-to-use outputs</h3>
@@ -112,12 +112,12 @@ export default function Home() {
 
             <div className="map-image flex-1 text-center">
               <img
-                src="src/images/eth.png"
+                src="images/eth.png"
                 alt="Ethiopia map"
                 width="200"
                 height="200"
                 className="mx-auto cursor-pointer hover:scale-105 transition-transform duration-200"
-                onClick={() => openImage("src/images/eth.png", "Ethiopia map")}
+                onClick={() => openImage("images/eth.png", "Ethiopia map")}
               />
               <div className="mt-3">
                 <Link

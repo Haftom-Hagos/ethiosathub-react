@@ -103,26 +103,26 @@ export default function Data() {
                 <h5 className="font-medium mb-2 text-gray-800">GCS (EPSG:4326)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
                   <li>
-                    <a href="src/data/ethiopia_admin_level_0_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a>
+                    <a href="data/ethiopia_admin_level_0_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a>
                   </li>
                   <li>
-                    <a href="src/data/ethiopia_admin_level_1_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a>
+                    <a href="data/ethiopia_admin_level_1_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a>
                   </li>
                   <li>
-                    <a href="src/data/ethiopia_admin_level_2_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a>
+                    <a href="data/ethiopia_admin_level_2_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a>
                   </li>
                   <li>
-                    <a href="src/data/ethiopia_admin_level_3_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a>
+                    <a href="data/ethiopia_admin_level_3_gcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a>
                   </li>
                 </ul>
               </div>
               <div>
                 <h5 className="font-medium mb-2 text-gray-800">PCS (EPSG:32637)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li><a href="src/data/ethiopia_admin_level_0_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_1_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_2_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
-                  <li><a href="src/dataethiopia_admin_level_3_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
+                  <li><a href="data/ethiopia_admin_level_0_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
+                  <li><a href="data/ethiopia_admin_level_1_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
+                  <li><a href="data/ethiopia_admin_level_2_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
+                  <li><a href="dataethiopia_admin_level_3_pcs.zip" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
                 </ul>
               </div>
             </div>
@@ -135,19 +135,19 @@ export default function Data() {
               <div>
                 <h5 className="font-medium mb-2 text-gray-800">GCS (EPSG:4326)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li><a href="src/data/ethiopia_admin_level_0_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_1_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_2_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_3_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
+                  <li><a href="data/ethiopia_admin_level_0_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
+                  <li><a href="data/ethiopia_admin_level_1_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
+                  <li><a href="data/ethiopia_admin_level_2_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
+                  <li><a href="data/ethiopia_admin_level_3_gcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
                 </ul>
               </div>
               <div>
                 <h5 className="font-medium mb-2 text-gray-800">PCS (EPSG:32637)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li><a href="src/data/ethiopia_admin_level_0_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_1_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_2_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_3_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
+                  <li><a href="data/ethiopia_admin_level_0_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
+                  <li><a href="data/ethiopia_admin_level_1_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
+                  <li><a href="data/ethiopia_admin_level_2_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
+                  <li><a href="data/ethiopia_admin_level_3_pcs.gpkg" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
                 </ul>
               </div>
             </div>
@@ -160,19 +160,19 @@ export default function Data() {
               <div>
                 <h5 className="font-medium mb-2 text-gray-800">GCS (EPSG:4326)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li><a href="src/data/ethiopia_admin_level_0_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_1_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_2_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_3_gcs_simplified.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
+                  <li><a href="data/ethiopia_admin_level_0_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
+                  <li><a href="data/ethiopia_admin_level_1_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
+                  <li><a href="data/ethiopia_admin_level_2_gcs.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
+                  <li><a href="data/ethiopia_admin_level_3_gcs_simplified.geojson" download target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
                 </ul>
               </div>
               <div>
                 <h5 className="font-medium mb-2 text-gray-800">PCS (EPSG:32637)</h5>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
-                  <li><a href="src/data/ethiopia_admin_level_0_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_1_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_2_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
-                  <li><a href="src/data/ethiopia_admin_level_3_pcs_simplified.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
+                  <li><a href="data/ethiopia_admin_level_0_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 0</a></li>
+                  <li><a href="data/ethiopia_admin_level_1_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 1</a></li>
+                  <li><a href="data/ethiopia_admin_level_2_pcs.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 2</a></li>
+                  <li><a href="data/ethiopia_admin_level_3_pcs_simplified.geojson" target="_blank" className="text-green-600 hover:underline">Admin Level 3</a></li>
                 </ul>
               </div>
             </div>

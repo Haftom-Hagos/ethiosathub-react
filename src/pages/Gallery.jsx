@@ -22,56 +22,56 @@ export default function Gallery() {
 
   const galleryItems = [
     {
-      img: "src/images/aa_lidar_3d.png",
+      img: "images/aa_lidar_3d.png",
       title: "3D Canopy Height Map - Addis Ababa",
       desc:
         "3D visualization of canopy height model for Addis Ababa.",
       more: `A 3D height map was created for a section of Addis Ababa by subtracting the Digital Terrain Model (DTM) from the Digital Surface Model (DSM), both derived from LiDAR point clouds...`
     },
     {
-      img: "src/images/Mekelle_tree_patches.jpg",
+      img: "images/Mekelle_tree_patches.jpg",
       title: "Tree patches and green areas of Mekelle city",
       desc: "Urban trees play a vital role in regulating city temperatures, improving air quality, and enhancing residents’ well-being.",
       more:
         "This map visualizes trees taller than one meter along with other green areas in Mekelle city, Tigray, Ethiopia..."
     },
     {
-      img: "src/images/3d_land_cover_addis_2023.png",
+      img: "images/3d_land_cover_addis_2023.png",
       title: "2023 Land Cover Classification for Addis Ababa",
       desc: "3D land cover maps offer a more realistic visualization of the study area.",
       more:
         "For 2023, the 3D land cover map of Addis Ababa shows that trees are largely confined to mountainous areas..."
     },
     {
-      img: "src/images/Addis_roads.png",
+      img: "images/Addis_roads.png",
       title: "Road network map of Addis Ababa",
       desc: "This map presents the road network of Addis Ababa, Ethiopia, generated using data from OpenStreetMap.",
       more:
         "Primary and major roads are depicted with greater width, emphasizing main transport arteries..."
     },
     {
-      img: "src/images/Tigray_river.png",
+      img: "images/Tigray_river.png",
       title: "3D River network of Tigray Region",
       desc: "This 3D elevation map of Tigray showcases the region’s rugged topography.",
       more:
         "The map highlights the intricate network of rivers that traverse the mountainous terrain..."
     },
     {
-      img: "src/images/S_tigray_CH.png",
+      img: "images/S_tigray_CH.png",
       title: "Canopy height model of Southern Tigray",
       desc: "Canopy height is a fundamental parameter for understanding forest structure and biomass production.",
       more:
         "This map presents a detailed canopy height model of Southern Tigray, Ethiopia..."
     },
     {
-      img: "src/images/southern_tigray_lc_3d.png",
+      img: "images/southern_tigray_lc_3d.png",
       title: "3D land cover map of Southern Tigray",
       desc: "Traditional land cover maps overlook terrain influence on cover patterns.",
       more:
         "The 2023 3D land cover map of Southern Tigray illustrates how terrain shapes land distribution..."
     },
     {
-      img: "src/images/Centeral_Tigray_Vegetation_map.jpg",
+      img: "images/Centeral_Tigray_Vegetation_map.jpg",
       title: "Central Tigray Vegetation Cover",
       desc: "This map illustrates vegetation coverage in the Central Zone of Tigray.",
       more:
