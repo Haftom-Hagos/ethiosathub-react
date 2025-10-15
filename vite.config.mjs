@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     tailwindcss(),  // Integrates Tailwind CSS seamlessly—no PostCSS config required
   ],
-  base: '/',  // Ensures correct asset paths for production deploys (e.g., Render, GitHub Pages)
+  base: './',  // Ensures correct asset paths for production deploys (e.g., Render, GitHub Pages)
   server: {
     port: 5173,  // Custom dev server port
     mimeTypes: {

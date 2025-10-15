@@ -43,7 +43,7 @@ a {
 
 /* Push page content below navbar */
 .sub-contents {
-  margin-top: 80px; /* Adjust to match navbar height */
+  margin-top: 0; /* Adjust to match navbar height */
 }
 
 /* Leaflet z-index overrides (keeps map behind navbar, controls accessible) */
@@ -55,3 +55,123 @@ a {
 .leaflet-control-container {
   z-index: 1000 !important;
 }
+
+/* Full-width image slider (positioned below navbar) */
+
+.landing-page {
+  position: relative;
+  width: 100vw;     /* Full viewport width */
+  left: 50%;        /* Shift to center */
+  right: 50%;
+  margin-left: -50vw; /* Pull it back so it spans edge to edge */
+  margin-right: -50vw;
+  overflow: hidden;
+}
+
+.image-slider {
+  position: relative;
+  width: 100vw;
+  height: 95vh;
+  overflow: hidden;
+  margin: 0;
+}
+
+.slider-wrapper {
+  display: flex;
+  width: calc(15%); /* for duplicated slides */
+  height: 100%;
+  animation: slide 120s infinite linear;
+}
+
+.slide {
+  width: 100%; /* Each slide fills full viewport width */
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* If still too zoomed/cropped, change to 'contain' for full image visibility (may add bars) */
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-600%); /* Slides exactly 6 full viewports left to reach duplicate start */
+  }
+}
+
+/* Pause animation on hover for better UX */
+.image-slider:hover .slider-wrapper {
+  animation-play-state: paused;
+}
+
+/* Main Page Styles */
+.main-page {
+  background: linear-gradient(180deg, lightgreen) !important;
+  padding: 50px 20px !important;
+  text-align: center !important;
+}
+
+.main-page h1 {
+  margin: 30px auto !important;
+  font-size: 25px !important;
+  width: 80% !important;
+  color: black !important;
+  justify-content: center !important;
+}
+
+/* Main Services List (Hover Effects) */
+.main-services {
+  list-style: none !important;
+  display: flex !important;
+  justify-content: center !important;
+  padding: 40px 0 !important;
+  margin: 10px 0 !important;
+  gap: 100px !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  //box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px !important;
+}
+
+.main-services li {
+  position: relative !important;
+  padding: 50px !important;
+  overflow: hidden !important;
+}
+
+.main-services img {
+  width: 80vw !important;
+  max-width: 300px !important;
+  height: 300px !important;
+  display: block !important;
+  border-radius: 5% !important;
+  box-shadow: rgba(0, 0, 0, 0.95) 0px 5px 15px !important;
+}
+
+.main-services li:hover img {
+  transform: scale(1.1) !important;
+  transition: transform 0.3s !important;
+  filter: brightness(70%) !important;
+}
+
+.main-services li:hover .text-overlay {
+  opacity: 1 !important;
+}
+
+.text-overlay {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  color: white !important;
+  border-radius: 10px !important;
+  transition: opacity 0.3s !important;
+  text-align: center !important;
+  transform: translate(-50%, -50%) !important;
+  opacity: 0 !important;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7) !important;
+}
+

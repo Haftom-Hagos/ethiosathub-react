@@ -352,15 +352,15 @@ export default function Maps() {
           <div key={label}>
             <div className="font-semibold mb-1">{label}</div>
             <div className="flex gap-2">
-              <select value={y} onChange={(e) => setY(e.target.value)} className="border p-2 rounded w-24">
+              <select value={y} onChange={(e) => setY(e.target.value)} className="border p-2 rounded w-20">
                 <option value="">Year</option>
                 {yearOptions.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
               </select>
-              <select value={m} onChange={(e) => setM(e.target.value)} className="border p-2 rounded w-20">
+              <select value={m} onChange={(e) => setM(e.target.value)} className="border p-2 rounded w-22">
                 <option value="">Month</option>
                 {monthOptions.map((mo) => <option key={mo} value={mo}>{mo}</option>)}
               </select>
-              <select value={d} onChange={(e) => setD(e.target.value)} className="border p-2 rounded w-20">
+              <select value={d} onChange={(e) => setD(e.target.value)} className="border p-2 rounded w-18">
                 <option value="">Day</option>
                 {dayOptionsFor(y, m).map((dd) => <option key={dd} value={dd}>{dd}</option>)}
               </select>
