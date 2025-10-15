@@ -32,6 +32,15 @@ export default function Home() {
   return (
     <>
       <div className="space-y-12">
+<<<<<<< HEAD
+       {/* Landing / hero - Animated background */}
+		<section className="landing-page text-center">
+		  <h3 className="text-3xl font-bold mb-2 drop-shadow-lg">EGSH</h3>
+		  <p className="text-gray-200 drop-shadow-md">
+			Welcome to EthioSatHub! <br />
+			Remote Sensing &amp; Environmental Consultancy — Ethiopia
+		  </p>
+=======
        {/* Landing / hero - Animated background with sliding images */}
 	   <section className="landing-page relative overflow-hidden text-center w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
 		  {/* Full-width image slider as background */}
@@ -59,6 +68,7 @@ export default function Home() {
 			  </p>
 			</div>
 		  </div>
+>>>>>>> a0b1564 (several changes made)
 		</section>
 
 
