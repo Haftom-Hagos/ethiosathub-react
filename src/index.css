@@ -56,6 +56,87 @@ a {
   z-index: 1000 !important;
 }
 
+
+/* Landing Page Styles */
+.landing-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('/images/Tigray_river.png');
+  animation: bgSlide 30s infinite ease-in-out;
+  transition: background-image 1.5s ease-in-out;
+}
+
+/* Keyframes: only one valid declaration */
+@keyframes bgSlide {
+  0% {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/Tigray_river.png');
+    opacity: 1;
+  }
+  25% {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/bg.jpg');
+    opacity: 0.95;
+  }
+  50% {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/bg1.jpg');
+    opacity: 0.9;
+  }
+  75% {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/bg2.jpg');
+    opacity: 0.98;
+  }
+  100% {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/bg3.jpg');
+    opacity: 1;
+  }
+}
+
+@keyframes bgMove {
+  0% {
+    background-position: center center;
+  }
+  25% {
+    background-position: right center;
+  }
+  50% {
+    background-position: center bottom;
+  }
+  75% {
+    background-position: left center;
+  }
+  100% {
+    background-position: center center;
+  }
+}
+
+/* Hero Text Styles */
+.landing-page h3 {
+  color: white !important;
+  font-size: 70px !important;
+  text-align: center !important;
+  margin-bottom: 20px !important;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7) !important;
+}
+
+.landing-page p {
+  width: 60% !important;
+  color: white !important;
+  text-align: center !important;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7) !important;
+  font-size: 25px !important;
+  line-height: 3 !important;
+}
+
 /* Full-width image slider (positioned below navbar) */
 
 .landing-page {
@@ -107,11 +188,15 @@ a {
 /* Pause animation on hover for better UX */
 .image-slider:hover .slider-wrapper {
   animation-play-state: paused;
+
 }
 
 /* Main Page Styles */
 .main-page {
+
+  background: linear-gradient(180deg, whitesmoke) !important;
   background: linear-gradient(180deg, lightgreen) !important;
+
   padding: 50px 20px !important;
   text-align: center !important;
 }
@@ -134,7 +219,10 @@ a {
   gap: 100px !important;
   flex-wrap: wrap !important;
   width: 100% !important;
+
+  box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px !important;
   //box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px !important;
+
 }
 
 .main-services li {
