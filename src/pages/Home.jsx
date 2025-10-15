@@ -32,115 +32,104 @@ export default function Home() {
   return (
     <>
       <div className="space-y-12">
-<<<<<<< HEAD
-       {/* Landing / hero - Animated background */}
-		<section className="landing-page text-center">
-		  <h3 className="text-3xl font-bold mb-2 drop-shadow-lg">EGSH</h3>
-		  <p className="text-gray-200 drop-shadow-md">
-			Welcome to EthioSatHub! <br />
-			Remote Sensing &amp; Environmental Consultancy — Ethiopia
-		  </p>
-=======
-       {/* Landing / hero - Animated background with sliding images */}
-	   <section className="landing-page relative overflow-hidden text-center w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
-		  {/* Full-width image slider as background */}
-		  <div className="image-slider absolute inset-y-0 left-0"> {/* Pin to top/bottom of section, let CSS width extend full */}
-			<div className="slider-wrapper">
-			  {slides.map((image, index) => (
-				<div key={index} className="slide h-full">
-				  <img 
-					src={image.src} 
-					alt={image.alt}
-					className="w-full h-full object-cover"
-				  />
-				</div>
-			  ))}
-			</div>
-		  </div>
-		  
-		  {/* Overlay text content - transparent box, just padding/rounded for subtle container; text shadows for readability */}
-		  <div className="absolute inset-0 flex flex-col justify-center items-center z-10 h-full"> {/* Match full height */}
-			<div className="px-6 py-4 rounded-lg"> {/* Fully transparent */}
-			  <h3 className="text-8xl font-bold mb-2 drop-shadow-2xl text-white">EGSH</h3> {/* Strong shadow for visibility */}
-			  <p className="text-white drop-shadow-xl text-3xl">
-				Welcome to Ethiopia GeoSpatial Hub! <br />
-				Remote Sensing &amp; Environmental Consultancy — Ethiopia
-			  </p>
-			</div>
-		  </div>
->>>>>>> a0b1564 (several changes made)
-		</section>
+        {/* Landing / hero - Animated background with sliding images */}
+        <section className="landing-page relative overflow-hidden text-center w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
+          {/* Full-width image slider as background */}
+          <div className="image-slider absolute inset-y-0 left-0"> {/* Pin to top/bottom of section, let CSS width extend full */}
+            <div className="slider-wrapper">
+              {slides.map((image, index) => (
+                <div key={index} className="slide h-full">
+                  <img 
+                    src={image.src} 
+                    alt={image.alt}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Overlay text content - transparent box, just padding/rounded for subtle container; text shadows for readability */}
+          <div className="absolute inset-0 flex flex-col justify-center items-center z-10 h-full"> {/* Match full height */}
+            <div className="px-6 py-4 rounded-lg"> {/* Fully transparent */}
+              <h3 className="text-8xl font-bold mb-2 drop-shadow-2xl text-white">EGSH</h3> {/* Strong shadow for visibility */}
+              <p className="text-white drop-shadow-xl text-3xl">
+                Welcome to Ethiopia GeoSpatial Hub! <br />
+                Remote Sensing &amp; Environmental Consultancy — Ethiopia
+              </p>
+            </div>
+          </div>
+        </section>
 
+        {/* Services / main */}
+        <section className="main-page">
+          <h1 className="text-xl font-semibold mb-4">
+            We provide specialised consultancy services in remote sensing and GIS
+            applications tailored to Ethiopia’s environmental challenges. Beyond
+            our online tools, we support organisations, researchers, and
+            policymakers with offline analysis services, including:
+          </h1>
 
-		{/* Services / main */}
-		<section className="main-page">
-		  <h1 className="text-xl font-semibold mb-4">
-			We provide specialised consultancy services in remote sensing and GIS
-			applications tailored to Ethiopia’s environmental challenges. Beyond
-			our online tools, we support organisations, researchers, and
-			policymakers with offline analysis services, including:
-		  </h1>
+          <ul className="main-services">
+            <li>
+              <img
+                src="/images/southern_tigray_lc_3d.png"
+                alt="Supervised classification"
+                onClick={() => openImage("/images/southern_tigray_lc_3d.png", "Supervised classification")}
+              />
+              <div className="text-overlay">
+                <h3 className="font-semibold">Supervised classification</h3>
+                <p className="text-sm">using client-provided ground truth data</p>
+              </div>
+            </li>
 
-		  <ul className="main-services">
-			<li>
-			  <img
-				src="/images/southern_tigray_lc_3d.png"
-				alt="Supervised classification"
-				onClick={() => openImage("/images/southern_tigray_lc_3d.png", "Supervised classification")}
-			  />
-			  <div className="text-overlay">
-				<h3 className="font-semibold">Supervised classification</h3>
-				<p className="text-sm">using client-provided ground truth data</p>
-			  </div>
-			</li>
+            <li>
+              <img
+                src="/images/Humera.jpg"
+                alt="MLB"
+                onClick={() => openImage("/images/Humera.jpg", "MLB")}
+              />
+              <div className="text-overlay">
+                <h3 className="font-semibold">MLB</h3>
+                <p className="text-sm">Machine learning–based environmental mapping</p>
+              </div>
+            </li>
 
-			<li>
-			  <img
-				src="/images/Humera.jpg"
-				alt="MLB"
-				onClick={() => openImage("/images/Humera.jpg", "MLB")}
-			  />
-			  <div className="text-overlay">
-				<h3 className="font-semibold">MLB</h3>
-				<p className="text-sm">Machine learning–based environmental mapping</p>
-			  </div>
-			</li>
-
-			<li>
-			  <img
-				src="/images/aa_stad_lidar_3d.png"
-				alt="Ready-to-use outputs"
-				onClick={() => openImage("/images/aa_stad_lidar_3d.png", "Ready-to-use outputs")}
-			  />
-			  <div className="text-overlay">
-				<h3 className="font-semibold">Ready-to-use outputs</h3>
-				<p className="text-sm">such as high-resolution maps, statistics, and reports</p>
-			  </div>
-			</li>
-		  </ul>
-		</section>
+            <li>
+              <img
+                src="/images/aa_stad_lidar_3d.png"
+                alt="Ready-to-use outputs"
+                onClick={() => openImage("/images/aa_stad_lidar_3d.png", "Ready-to-use outputs")}
+              />
+              <div className="text-overlay">
+                <h3 className="font-semibold">Ready-to-use outputs</h3>
+                <p className="text-sm">such as high-resolution maps, statistics, and reports</p>
+              </div>
+            </li>
+          </ul>
+        </section>
 
         {/* Map / Downloadable maps */}
         <section className="bg-gray-200 p-8 rounded-lg shadow-md flex justify-center">
-		  <div className="map flex flex-col md:flex-row items-center gap-6 max-w-4xl">
-			<div className="flex-1 text-center md:text-center">
-			  <h2 className="text-3xl font-semibold mb-2 text-green-800">Visualize and download products </h2>
-			  <p className="text-2xl text-gray-600 mb-4">
-				Explore our our interactive dashboard for visualizing and downloading satellite derivied outputs. 
-				Access a variety of geospatial datasets relevant to Ethiopia. Our data resources include Sentinel-2, 
-				Landsat and MODIS derived vegetation indices, different drought indices and land cover maps to support your projects and research.
-			  </p>
-			  <Link
-				to="/maps"
-				className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700"
-			  >
-				Explore Dashboard
-			  </Link>
-			</div>
-				
+          <div className="map flex flex-col md:flex-row items-center gap-6 max-w-4xl">
+            <div className="flex-1 text-center md:text-center">
+              <h2 className="text-3xl font-semibold mb-2 text-green-800">Visualize and download products </h2>
+              <p className="text-2xl text-gray-600 mb-4">
+                Explore our our interactive dashboard for visualizing and downloading satellite derivied outputs. 
+                Access a variety of geospatial datasets relevant to Ethiopia. Our data resources include Sentinel-2, 
+                Landsat and MODIS derived vegetation indices, different drought indices and land cover maps to support your projects and research.
+              </p>
+              <Link
+                to="/maps"
+                className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700"
+              >
+                Explore Dashboard
+              </Link>
+            </div>
+                
 
             {/*
-			<div className="map-image flex-1 text-center">
+            <div className="map-image flex-1 text-center">
               <img
                 src="/images/eth.png"
                 alt="Ethiopia map"
@@ -158,48 +147,48 @@ export default function Home() {
                 </Link>
               </div>
             </div>
-			*/}
+            */}
           </div>
         </section>
 
         {/* Data Resources */}
-		<section className="flex justify-center bg-gray-200 p-8 rounded-lg shadow-md">
-		  <div className="data flex flex-col items-center max-w-4xl text-center md:text-center">
-			
-			{/* Heading */}
-			<h2 className="text-3xl font-semibold mb-2 text-green-800">
-			  Data Resources
-			</h2>
-			
-			{/* Description */}
-			<p className="text-2xl text-gray-600 mb-4">
-			  Access Ethiopia’s complete administrative boundary datasets, from national to district level, 
-			  available in multiple formats (SHP, GPKG, GeoJSON) and coordinate systems (GCS and PCS).
-			</p>
-			
-			{/* Button / Link */}
-			<Link
-			  to="/data"
-			  className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700 transition-colors"
-			>
-			  Explore Data Resources
-			</Link>
-		  </div>
-		</section>
+        <section className="flex justify-center bg-gray-200 p-8 rounded-lg shadow-md">
+          <div className="data flex flex-col items-center max-w-4xl text-center md:text-center">
+            
+            {/* Heading */}
+            <h2 className="text-3xl font-semibold mb-2 text-green-800">
+              Data Resources
+            </h2>
+            
+            {/* Description */}
+            <p className="text-2xl text-gray-600 mb-4">
+              Access Ethiopia’s complete administrative boundary datasets, from national to district level, 
+              available in multiple formats (SHP, GPKG, GeoJSON) and coordinate systems (GCS and PCS).
+            </p>
+            
+            {/* Button / Link */}
+            <Link
+              to="/data"
+              className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700 transition-colors"
+            >
+              Explore Data Resources
+            </Link>
+          </div>
+        </section>
 
 
         {/* Small footer block (page-specific) */}
         <section className="flex justify-center bg-gray-50 p-8 rounded-lg shadow-md">
-		  <div className="footer-content max-w-4xl text-center md:text-left">
-			
-			<p className="text-xl text-gray-600">
-			  Whether you are a government agency, NGO, researcher, or private
-			  business, we are committed to transforming your data into accurate,
-			  actionable, and decision-ready solutions.
-			</p>
-			
-		  </div>
-		</section>
+          <div className="footer-content max-w-4xl text-center md:text-left">
+            
+            <p className="text-xl text-gray-600">
+              Whether you are a government agency, NGO, researcher, or private
+              business, we are committed to transforming your data into accurate,
+              actionable, and decision-ready solutions.
+            </p>
+            
+          </div>
+        </section>
       </div>
 
       {/* Image Zoom Modal */}
