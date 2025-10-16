@@ -51,7 +51,7 @@ export default function Home() {
 		  
 		  {/* Overlay text content - transparent box, just padding/rounded for subtle container; text shadows for readability */}
 		  <div className="absolute inset-0 flex flex-col justify-center items-center z-10 h-full"> {/* Match full height */}
-			<div className="px-2 py-4 rounded-lg"> {/* Fully transparent */}
+			<div className="px-6 py-4 rounded-lg"> {/* Fully transparent */}
 			  <h3 className="text-8xl font-bold mb-2 drop-shadow-2xl text-white">GEORICA</h3> {/* Strong shadow for visibility */}
 			  <p className="text-white drop-shadow-xl text-3xl">
 				Welcome to Georica <br />
