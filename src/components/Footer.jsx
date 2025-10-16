@@ -16,7 +16,7 @@ export default function Footer() {
         <div className="text-center md:text-left space-y-1">
           <div className="text-sm">
             © {new Date().getFullYear()}{" "}
-            <span className="font-semibold text-white">Ethiopia GeoSpatial Hub</span>
+            <span className="font-semibold text-white">Georica</span>
           </div>
           <div className="text-xs text-gray-400">All rights reserved</div>
           <div className="text-xs text-gray-400 mt-1">
