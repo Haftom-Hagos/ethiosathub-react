@@ -15,7 +15,7 @@ export default function Navbar(){
       <div className="w-full bg-gray-800 max-w-none px-4 md:px-6 lg:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-10 rounded-md bg-gray-400 flex items-center justify-center text-white font-bold">G</div>
-          <div className="text-xl font-semibold text-white">Georica <br /> Environmental intelligence</div>  {/* Added text-white for logo */}
+          <div className="text-xl font-semibold text-white">Georica Environmental <br /> Intelligence</div>  {/* Added text-white for logo */}
         </div>
         <nav className="hidden md:flex gap-4 items-center">  {/* Temporarily: remove 'hidden md:' to test */}
           {links.map(l => (
