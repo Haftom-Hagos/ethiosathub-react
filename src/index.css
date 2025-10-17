@@ -57,7 +57,6 @@ a {
 }
 
 /* Full-width image slider (positioned below navbar) */
-
 .landing-page {
   position: relative;
   width: 100vw;     /* Full viewport width */
@@ -111,66 +110,99 @@ a {
 
 /* Main Page Styles */
 .main-page {
-  background: linear-gradient(180deg, lightgreen) !important;
-  padding: 50px 20px !important;
-  text-align: center !important;
+  background: linear-gradient(180deg, lightgreen);
+  padding: 50px 20px;
+  text-align: center;
 }
 
 .main-page h1 {
-  margin: 30px auto !important;
-  font-size: 25px !important;
-  width: 80% !important;
-  color: black !important;
-  justify-content: center !important;
+  margin: 30px auto;
+  font-size: 25px;
+  width: 80%;
+  color: black;
+  justify-content: center;
 }
 
 /* Main Services List (Hover Effects) */
 .main-services {
-  list-style: none !important;
-  display: flex !important;
-  justify-content: center !important;
-  padding: 40px 0 !important;
-  margin: 10px 0 !important;
-  gap: 100px !important;
-  flex-wrap: wrap !important;
-  width: 100% !important;
-  //box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px !important;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
+  gap: 1.5rem; /* Space between items */
+  max-width: 1200px; /* Limit max width */
+  margin: 10px auto; /* Center with margin */
+  padding: 40px 0;
 }
 
+/* Style each list item */
 .main-services li {
-  position: relative !important;
-  padding: 50px !important;
-  overflow: hidden !important;
+  position: relative; /* Context for absolute positioning of text-overlay */
+  overflow: hidden; /* Ensure rounded corners are respected */
+  border-radius: 0.375rem; /* Match Tailwind's rounded-md */
 }
 
+/* Style images */
 .main-services img {
-  width: 80vw !important;
-  max-width: 300px !important;
-  height: 300px !important;
-  display: block !important;
-  border-radius: 5% !important;
-  box-shadow: rgba(0, 0, 0, 0.95) 0px 5px 15px !important;
+  width: 100%;
+  height: 300px; /* Consistent height */
+  max-width: 300px; /* Limit max width */
+  object-fit: cover; /* Cover without distortion */
+  display: block; /* Remove inline spacing */
+  border-radius: 0.375rem; /* Match rounded-md */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.95); /* Match original shadow */
+  transition: transform 0.3s ease, filter 0.3s ease; /* Smooth transitions */
 }
 
+/* Image hover effects */
 .main-services li:hover img {
-  transform: scale(1.1) !important;
-  transition: transform 0.3s !important;
-  filter: brightness(70%) !important;
+  transform: scale(1.1);
+  filter: brightness(70%);
 }
 
+/* Text overlay */
+.main-services .text-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+  color: white;
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.3s ease; /* Smooth fade */
+  border-radius: 0.375rem; /* Match image rounding */
+  padding: 1rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); /* Match original shadow */
+}
+
+/* Show text-overlay on hover */
 .main-services li:hover .text-overlay {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
-.text-overlay {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  color: white !important;
-  border-radius: 10px !important;
-  transition: opacity 0.3s !important;
-  text-align: center !important;
-  transform: translate(-50%, -50%) !important;
-  opacity: 0 !important;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7) !important;
+/* Text overlay content */
+.main-services .text-overlay h3 {
+  font-size: 1.125rem; /* Match Tailwind text-lg */
+  font-weight: 600; /* Match font-semibold */
+  margin-bottom: 0.25rem;
+}
+
+.main-services .text-overlay p {
+  font-size: 0.875rem; /* Match Tailwind text-sm */
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .main-services {
+    grid-template-columns: 1fr; /* Stack vertically on smaller screens */
+  }
+
+  .main-services img {
+    max-width: 100%; /* Full width on small screens */
+  }
 }
