@@ -16,7 +16,7 @@ export default function Footer() {
         <div className="text-center md:text-left space-y-1">
           <div className="text-sm">
             © {new Date().getFullYear()}{" "}
-            <span className="font-semibold text-white">Georica</span>
+            <span className="font-semibold text-white">Ethiopia GeoSpatial Hub</span>
           </div>
           <div className="text-xs text-gray-400">All rights reserved</div>
           <div className="text-xs text-gray-400 mt-1">
@@ -45,7 +45,7 @@ export default function Footer() {
           <h4 className="font-semibold text-white text-base">Follow Us</h4>
           <div className="flex gap-4 justify-center md:justify-end">
             <a
-              href="https://youtube.com"
+              href="https://www.youtube.com/@ethiosathub"
               target="_blank"
               rel="noreferrer"
               className="hover:text-red-500 transform transition duration-300 hover:scale-125"
@@ -54,7 +54,7 @@ export default function Footer() {
             </a>
 
             <a
-              href="https://twitter.com"
+              href="https://x.com/EthioSatHub"
               target="_blank"
               rel="noreferrer"
               className="hover:text-sky-400 transform transition duration-300 hover:scale-125"
@@ -62,17 +62,17 @@ export default function Footer() {
               <FaXTwitter className="w-6 h-6" />
             </a>
 
-            <a
+			{/*<a
               href="https://instagram.com"
               target="_blank"
               rel="noreferrer"
               className="hover:text-pink-500 transform transition duration-300 hover:scale-125"
             >
               <FaInstagram className="w-6 h-6" />
-            </a>
+            </a>*/}
 
             <a
-              href="https://linkedin.com"
+              href="http://www.linkedin.com/in/haftomhagos"
               target="_blank"
               rel="noreferrer"
               className="hover:text-blue-500 transform transition duration-300 hover:scale-125"
@@ -80,14 +80,14 @@ export default function Footer() {
               <FaLinkedin className="w-6 h-6" />
             </a>
 
-            <a
+            {/*<a
               href="https://github.com"
               target="_blank"
               rel="noreferrer"
               className="hover:text-gray-100 transform transition duration-300 hover:scale-125"
             >
               <FaGithub className="w-6 h-6" />
-            </a>
+            </a>*/}
           </div>
         </div>
       </div>
