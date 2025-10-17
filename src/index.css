@@ -110,7 +110,7 @@ a {
 
 /* Main Page Styles */
 .main-page {
-  background: linear-gradient(180deg, lightgreen);
+  background: linear-gradient(180deg, lightgray);
   padding: 50px 20px;
   text-align: center;
 }
