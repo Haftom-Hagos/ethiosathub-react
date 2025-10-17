@@ -1,181 +1,191 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "tailwindcss";
 
-export default function Home() {
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+/* Global resets and fonts */
+html, body, #root {
+  height: 100%;
+}
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
 
-  const [selectedImage, setSelectedImage] = useState(null);
+/* Custom utilities */
+.container {
+  max-width: 1100px;
+}
+.prose h1, .prose h2 {
+  color: #0f172a;
+}
+h1, h2, h3 {
+  @apply font-bold text-gray-900;
+}
+a {
+  @apply text-green-600 hover:underline hover:text-green-800;
+}
 
-  const openImage = (src, alt) => {
-    setSelectedImage({ src, alt });
-  };
+/* CSS vars for theme */
+:root {
+  --color-primary: #16a34a;
+}
 
-  const closeImage = () => {
-    setSelectedImage(null);
-  };
+/* Navbar fixed positioning */
+.navbars {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 2000; /* Higher than Leaflet panes */
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
 
-  const heroImages = [
-    { src: "/images/Tigray_river.png", alt: "Hero slide 1" },
-    { src: "/images/bg1.jpg", alt: "Hero slide 2" },
-    { src: "/images/bg2.jpg", alt: "Hero slide 3" },
-    { src: "/images/bg3.jpg", alt: "Hero slide 4" },
-    { src: "/images/bg.jpg", alt: "Hero slide 5" },
-    { src: "/images/lands.jpg", alt: "Hero slide 6" },
-  ];
+/* Push page content below navbar */
+.sub-contents {
+  margin-top: 0; /* Adjust to match navbar height */
+}
 
-  const slides = [...heroImages, ...heroImages];
+/* Leaflet z-index overrides (keeps map behind navbar, controls accessible) */
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 1 !important;
+}
+.leaflet-control-container {
+  z-index: 1000 !important;
+}
 
-  return (
-    <>
-      <div className="space-y-12">
-        {/* Landing / hero - Animated background with sliding images */}
-        <section className="landing-page relative overflow-hidden text-center w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
-          <div className="image-slider absolute inset-y-0 left-0">
-            <div className="slider-wrapper">
-              {slides.map((image, index) => (
-                <div key={index} className="slide h-full">
-                  <img
-                    src={image.src}
-                    alt={image.alt}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="absolute inset-0 flex flex-col justify-center items-center z-10 h-full">
-            <div className="px-6 py-4 rounded-lg">
-              <h3 className="text-8xl font-bold mb-2 drop-shadow-2xl text-white">EGSH</h3>
-              <p className="text-white drop-shadow-xl text-3xl">
-                Welcome to Ethiopia GeoSpatial Hub! <br />
-                Remote Sensing &amp; Environmental Consultancy — Ethiopia
-              </p>
-            </div>
-          </div>
-        </section>
+/* Full-width image slider (positioned below navbar) */
+.landing-page {
+  position: relative;
+  width: 100vw;     /* Full viewport width */
+  left: 50%;        /* Shift to center */
+  right: 50%;
+  margin-left: -50vw; /* Pull it back so it spans edge to edge */
+  margin-right: -50vw;
+  overflow: hidden;
+}
 
-        {/* Services / main */}
-        <section className="main-page px-4 py-8">
-          <h1 className="text-2xl font-semibold mb-6 text-center max-w-4xl mx-auto">
-            We provide specialised consultancy services in remote sensing and GIS
-            applications tailored to Ethiopia’s environmental challenges. Beyond
-            our online tools, we support organisations, researchers, and
-            policymakers with offline analysis services, including:
-          </h1>
+.image-slider {
+  position: relative;
+  width: 100vw;
+  height: 95vh;
+  overflow: hidden;
+  margin: 0;
+}
 
-          <ul className="main-services">
-            <li className="service-item">
-              <div className="text-content text-center mb-4">
-                <h3 className="font-semibold text-lg">Supervised classification</h3>
-                <p className="text-sm text-gray-600">using client-provided ground truth data</p>
-              </div>
-              <img
-                src="/images/southern_tigray_lc_3d.png"
-                alt="Supervised classification"
-                className="service-image"
-                onClick={() => openImage("/images/southern_tigray_lc_3d.png", "Supervised classification")}
-              />
-            </li>
+.slider-wrapper {
+  display: flex;
+  width: calc(15%); /* for duplicated slides */
+  height: 100%;
+  animation: slide 120s infinite linear;
+}
 
-            <li className="service-item">
-              <div className="text-content text-center mb-4">
-                <h3 className="font-semibold text-lg">MLB</h3>
-                <p className="text-sm text-gray-600">Machine learning–based environmental mapping</p>
-              </div>
-              <img
-                src="/images/Humera.jpg"
-                alt="MLB"
-                className="service-image"
-                onClick={() => openImage("/images/Humera.jpg", "MLB")}
-              />
-            </li>
+.slide {
+  width: 100%; /* Each slide fills full viewport width */
+  height: 100%;
+  flex-shrink: 0;
+}
 
-            <li className="service-item">
-              <div className="text-content text-center mb-4">
-                <h3 className="font-semibold text-lg">Ready-to-use outputs</h3>
-                <p className="text-sm text-gray-600">such as high-resolution maps, statistics, and reports</p>
-              </div>
-              <img
-                src="/images/aa_stad_lidar_3d.png"
-                alt="Ready-to-use outputs"
-                className="service-image"
-                onClick={() => openImage("/images/aa_stad_lidar_3d.png", "Ready-to-use outputs")}
-              />
-            </li>
-          </ul>
-        </section>
+.slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* If still too zoomed/cropped, change to 'contain' for full image visibility (may add bars) */
+}
 
-        {/* Map / Downloadable maps */}
-        <section className="bg-gray-200 p-8 rounded-lg shadow-md flex justify-center">
-          <div className="map flex flex-col md:flex-row items-center gap-6 max-w-4xl">
-            <div className="flex-1 text-center md:text-center">
-              <h2 className="text-3xl font-semibold mb-2 text-green-800">Visualize and download products</h2>
-              <p className="text-2xl text-gray-600 mb-4">
-                Explore our interactive dashboard for visualizing and downloading satellite-derived outputs.
-                Access a variety of geospatial datasets relevant to Ethiopia. Our data resources include Sentinel-2,
-                Landsat, and MODIS-derived vegetation indices, different drought indices, and land cover maps to support your projects and research.
-              </p>
-              <Link
-                to="/maps"
-                className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700"
-              >
-                Explore Dashboard
-              </Link>
-            </div>
-          </div>
-        </section>
+@keyframes slide {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-600%); /* Slides exactly 6 full viewports left to reach duplicate start */
+  }
+}
 
-        {/* Data Resources */}
-        <section className="flex justify-center bg-gray-200 p-8 rounded-lg shadow-md">
-          <div className="data flex flex-col items-center max-w-4xl text-center md:text-center">
-            <h2 className="text-3xl font-semibold mb-2 text-green-800">
-              Data Resources
-            </h2>
-            <p className="text-2xl text-gray-600 mb-4">
-              Access Ethiopia’s complete administrative boundary datasets, from national to district level,
-              available in multiple formats (SHP, GPKG, GeoJSON) and coordinate systems (GCS and PCS).
-            </p>
-            <Link
-              to="/data"
-              className="inline-block bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-green-700 transition-colors"
-            >
-              Explore Data Resources
-            </Link>
-          </div>
-        </section>
+/* Pause animation on hover for better UX */
+.image-slider:hover .slider-wrapper {
+  animation-play-state: paused;
+}
 
-        {/* Small footer block (page-specific) */}
-        <section className="flex justify-center bg-gray-50 p-8 rounded-lg shadow-md">
-          <div className="footer-content max-w-4xl text-center md:text-left">
-            <p className="text-xl text-gray-600">
-              Whether you are a government agency, NGO, researcher, or private
-              business, we are committed to transforming your data into accurate,
-              actionable, and decision-ready solutions.
-            </p>
-          </div>
-        </section>
-      </div>
+/* Main Page Styles */
+.main-page {
+  background: linear-gradient(180deg, lightgreen);
+  padding: 50px 20px;
+  text-align: center;
+}
 
-      {/* Image Zoom Modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
-          <div className="relative max-w-4xl max-h-full">
-            <button
-              onClick={closeImage}
-              className="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 z-10"
-            >
-              <span className="text-xl">&times;</span>
-            </button>
-            <img
-              src={selectedImage.src}
-              alt={selectedImage.alt}
-              className="max-w-full max-h-[90vh] object-contain"
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
+.main-page h1 {
+  margin: 30px auto;
+  font-size: 25px;
+  width: 80%;
+  color: black;
+  justify-content: center;
+}
+
+/* Main Services List */
+.main-services {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
+  gap: 1.5rem; /* Space between items */
+  max-width: 1200px; /* Limit max width */
+  margin: 10px auto; /* Center with margin */
+  padding: 40px 0;
+}
+
+/* Style each list item */
+.main-services .service-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 0.375rem; /* Match Tailwind's rounded-md */
+}
+
+/* Style images */
+.main-services .service-image {
+  width: 100%;
+  height: 300px; /* Consistent height */
+  max-width: 300px; /* Limit max width */
+  object-fit: cover; /* Cover without distortion */
+  display: block; /* Remove inline spacing */
+  border-radius: 0.375rem; /* Match rounded-md */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.95); /* Match original shadow */
+  cursor: pointer; /* Indicate clickability */
+  transition: transform 0.3s ease, filter 0.3s ease; /* Smooth transitions */
+}
+
+/* Image hover effects */
+.main-services .service-item:hover .service-image {
+  transform: scale(1.1);
+  filter: brightness(70%);
+}
+
+/* Text content (above image) */
+.main-services .text-content {
+  margin-bottom: 1rem; /* Space between text and image */
+}
+
+/* Text content styling */
+.main-services .text-content h3 {
+  font-size: 1.125rem; /* Match Tailwind text-lg */
+  font-weight: 600; /* Match font-semibold */
+  margin-bottom: 0.25rem;
+}
+
+.main-services .text-content p {
+  font-size: 0.875rem; /* Match Tailwind text-sm */
+  color: #4b5563; /* Match Tailwind text-gray-600 */
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .main-services {
+    grid-template-columns: 1fr; /* Stack vertically on smaller screens */
+  }
+
+  .main-services .service-image {
+    max-width: 100%; /* Full width on small screens */
+  }
 }
