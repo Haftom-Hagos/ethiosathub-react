@@ -79,7 +79,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
@@ -94,7 +94,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
@@ -116,7 +116,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
@@ -131,7 +131,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
@@ -154,7 +154,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
@@ -169,7 +169,7 @@ export default function Data() {
                       target="_blank"
                       className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center text-green-700 hover:bg-green-100 hover:border-green-400 transition"
                     >
-                      Admin Level {level}
+                      Level {level}
                     </a>
                   ))}
                 </div>
