@@ -2,26 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
-// ── Firebase config ──
-const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
-};
-let firebaseApp, firebaseAuth, googleProvider;
-try {
-  firebaseApp    = initializeApp(firebaseConfig);
-  firebaseAuth   = getAuth(firebaseApp);
-  googleProvider = new GoogleAuthProvider();
-} catch(e) {
-  console.error("Firebase init failed:", e);
-}
 
 const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
 
@@ -79,11 +60,6 @@ export default function Maps() {
   const [selectedFeatureGeoJSON, setSelectedFeatureGeoJSON] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [user, setUser] = useState(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null);
-  const [authLoading, setAuthLoading] = useState(false);
-  // legacy email modal — kept for compatibility
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailPendingAction, setEmailPendingAction] = useState(null);
@@ -240,22 +216,7 @@ export default function Maps() {
     setTimeout(() => mapRef.current?.invalidateSize(), 320);
   }, [sidebarOpen, resultsOpen]);
 
-  // ── Firebase auth state listener ──
-  useEffect(() => {
-    if (!firebaseAuth) return;
-    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
-      setUser(u || null);
-      if (u) {
-        // Save email to Airtable on first sign-in
-        const key = `hwasat_logged_${u.uid}`;
-        if (!localStorage.getItem(key)) {
-          localStorage.setItem(key, "1");
-          saveEmailToBackend(u.email, "google_signin");
-        }
-      }
-    });
-    return unsub;
-  }, []);
+
 
   // ── Drawing Tools Engine ──
   useEffect(() => {
@@ -588,7 +549,7 @@ export default function Maps() {
       setLoading(true); setMessage(null);
       try {
         const controller = new AbortController();
-        setTimeout(() => controller.abort(), 120000);
+        setTimeout(() => controller.abort(), 300000);
         const res = await fetch(`${BACKEND_URL}/change_detection`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -612,7 +573,7 @@ export default function Maps() {
     setLoading(true); setMessage(null);
     try {
       const controller = new AbortController();
-      setTimeout(() => controller.abort(), 120000);
+      setTimeout(() => controller.abort(), 300000);
       const res = await fetch(`${BACKEND_URL}/gee_layers`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataset, index, startDate: `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`, endDate: `${toYear}-${toMonth || "12"}-${toDay || "31"}`, geometry }),
@@ -625,8 +586,9 @@ export default function Maps() {
       setMessage("Layer loaded successfully.");
     } catch (e) {
       const msg = e.message || "";
-      if (msg.includes("abort") || msg.includes("timeout"))
-        setMessage("Request timed out. Try a smaller area or shorter date range.");
+      const isAbort = e.name === "AbortError" || msg.includes("aborted");
+      if (isAbort)
+        setMessage("Request timed out (5 min limit). If this keeps happening, try a shorter date range.");
       else if (msg.includes("No") && (msg.includes("images") || msg.includes("data")))
         setMessage(`No ${DATASET_CONFIG[dataset]?.label || dataset} data found for this area and date range. Try a longer period or different dates.`);
       else if (msg.includes("cloud"))
@@ -792,7 +754,8 @@ export default function Maps() {
       setMessage("Time series loaded successfully.");
     } catch (e) {
       const msg = e.message || "";
-      if (msg.includes("abort") || msg.includes("timeout")) setMessage("Request timed out. Try a smaller area or shorter date range.");
+      const isAbort = e.name === "AbortError" || msg.includes("aborted");
+      if (isAbort) setMessage("Time series timed out. Try a shorter date range or smaller area.");
       else if (msg.includes("No") && msg.includes("data")) setMessage("No data available for this area and date range. Try adjusting your selection.");
       else setMessage(`Time series failed: ${msg}`);
     }
@@ -832,7 +795,8 @@ export default function Maps() {
       setMessage("Land cover statistics loaded successfully.");
     } catch (e) {
       const msg = e.message || "";
-      if (msg.includes("abort") || msg.includes("timeout")) setMessage("Request timed out. Try a smaller area or shorter date range.");
+      const isAbort = e.name === "AbortError" || msg.includes("aborted");
+      if (isAbort) setMessage("Stats timed out. Try a shorter date range or smaller area.");
       else setMessage(`Stats failed: ${msg}`);
     }
     finally { setStatsLoading(false); }
@@ -962,6 +926,8 @@ export default function Maps() {
       console.warn("Email save failed:", e);
     }
   };
+
+  const requireAuth = (actionLabel, actionFn) => requireEmail(actionLabel, actionFn);
 
   const requireEmail = (actionLabel, actionFn) => {
     const stored = localStorage.getItem("hwasat_user_email");
@@ -1707,92 +1673,52 @@ export default function Maps() {
           </div>
         </div>
       </div>
-        {/* ── Google Sign-in Modal ── */}
-        {authModalOpen && (
+        {/* ── Email Capture Modal ── */}
+        {emailModalOpen && (
           <div style={{
             position: "fixed", inset: 0, zIndex: 9999,
-            background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center",
-          }} onClick={(e) => { if (e.target === e.currentTarget) { setAuthModalOpen(false); setPendingAction(null); } }}>
+          }} onClick={(e) => { if (e.target === e.currentTarget) setEmailModalOpen(false); }}>
             <div style={{
-              background: "white", borderRadius: 20, padding: "40px 36px",
-              width: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.3)",
-              fontFamily: "sans-serif", position: "relative", textAlign: "center",
+              background: "white", borderRadius: 16, padding: "36px 32px",
+              width: 380, boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
+              fontFamily: "sans-serif", position: "relative",
             }}>
-              {/* Close */}
-              <button onClick={() => { setAuthModalOpen(false); setPendingAction(null); }} style={{
+              <button onClick={() => setEmailModalOpen(false)} style={{
                 position: "absolute", top: 14, right: 16, background: "none",
-                border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af",
+                border: "none", fontSize: 20, cursor: "pointer", color: "#9ca3af",
               }}>×</button>
-
-              {/* Logo mark */}
-              <div style={{
-                width: 56, height: 56, borderRadius: "50%", background: "#f0fdf4",
-                margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#f0fdf4", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#111" }}>Almost there</div>
+                <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
+                  Enter your email to continue.<br/>We will never spam you.
+                </div>
               </div>
-
-              <div style={{ fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 8 }}>Sign in to continue</div>
-              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 28, lineHeight: 1.6 }}>
-                Time series, statistics, downloads and exports<br/>require a free account.
-              </div>
-
-              {/* Google Sign-in button */}
-              <button onClick={handleGoogleSignIn} disabled={authLoading} style={{
-                width: "100%", padding: "13px 16px", borderRadius: 10,
-                border: "1.5px solid #e5e7eb", background: authLoading ? "#f9fafb" : "white",
-                cursor: authLoading ? "default" : "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
-                fontSize: 15, fontWeight: 600, color: "#374151",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                transition: "all 0.15s",
+              <input
+                type="email" placeholder="you@example.com"
+                value={emailInput} onChange={e => setEmailInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleEmailSubmit()}
+                autoFocus
+                style={{ width: "100%", padding: "11px 14px", fontSize: 14, border: "1.5px solid #e5e7eb", borderRadius: 9, outline: "none", boxSizing: "border-box", marginBottom: 12, fontFamily: "sans-serif" }}
+              />
+              <button onClick={handleEmailSubmit} disabled={!emailInput.includes("@")} style={{
+                width: "100%", padding: "12px", borderRadius: 9, border: "none",
+                background: emailInput.includes("@") ? "#22c55e" : "#e5e7eb",
+                color: emailInput.includes("@") ? "white" : "#9ca3af",
+                fontSize: 14, fontWeight: 700, cursor: emailInput.includes("@") ? "pointer" : "default",
               }}>
-                {authLoading ? (
-                  <span>Signing in...</span>
-                ) : (
-                  <>
-                    {/* Google G logo */}
-                    <svg width="20" height="20" viewBox="0 0 48 48">
-                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                    </svg>
-                    Continue with Google
-                  </>
-                )}
+                Continue →
               </button>
-
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 16 }}>
-                Free forever · No credit card required
+              <div style={{ textAlign: "center", fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+                Free forever. No account needed.
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ── User avatar — only shown when signed in ── */}
-        {user && (
-          <div style={{
-            position: "absolute", top: 10, right: resultsOpen ? 330 : 10, zIndex: 1000,
-            transition: "right 0.3s",
-            display: "flex", alignItems: "center", gap: 8,
-            background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",
-          }}>
-            {user.photoURL
-              ? <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%" }} />
-              : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.displayName?.[0] || "U"}</div>
-            }
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user.displayName?.split(" ")[0] || user.email}
-            </span>
-            <button onClick={handleSignOut} style={{
-              background: "none", border: "none", cursor: "pointer",
-              fontSize: 11, color: "#9ca3af", padding: "2px 4px",
-            }}>Sign out</button>
           </div>
         )}
 
