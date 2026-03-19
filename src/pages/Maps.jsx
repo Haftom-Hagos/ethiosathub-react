@@ -2,6 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+
+// ── Firebase config ──
+const firebaseConfig = {
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+};
+const firebaseApp  = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
 
 const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
 
@@ -59,9 +74,14 @@ export default function Maps() {
   const [selectedFeatureGeoJSON, setSelectedFeatureGeoJSON] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  // legacy email modal — kept for compatibility
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState("");
-  const [emailPendingAction, setEmailPendingAction] = useState(null); // fn to call after email captured
+  const [emailPendingAction, setEmailPendingAction] = useState(null);
   const [useCustomGeoJSON, setUseCustomGeoJSON] = useState(false);
   const [customGeoJSON, setCustomGeoJSON] = useState(null);
   const fileInputRef = useRef(null);
@@ -145,6 +165,50 @@ export default function Maps() {
     built: "#C4281B", bare: "#A59B8F", snow_and_ice: "#B39FE1",
   };
 
+  // ── AOI size limits per dataset (km²) ──
+  const AOI_LIMITS = {
+    sentinel2: { single: 1000,   timeseries: 500   },
+    landsat:   { single: 5000,   timeseries: 2000  },
+    modis:     { single: 50000,  timeseries: 20000 },
+    landcover: { single: 1000,   timeseries: 500   },
+    climate:   { single: 500000, timeseries: 200000},
+  };
+
+  // Approximate AOI area in km² from GeoJSON geometry
+  const getAoiAreaKm2 = (geometry) => {
+    try {
+      let coords = [];
+      if (geometry.type === "Polygon") coords = geometry.coordinates[0];
+      else if (geometry.type === "MultiPolygon") coords = geometry.coordinates[0][0];
+      else return 0;
+      // Shoelace formula in degrees then convert
+      let area = 0;
+      for (let i = 0; i < coords.length - 1; i++) {
+        area += coords[i][0] * coords[i+1][1];
+        area -= coords[i+1][0] * coords[i][1];
+      }
+      area = Math.abs(area) / 2;
+      // Convert deg² to km² using mean latitude
+      const meanLat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+      const km2 = area * 111.32 * 111.32 * Math.cos(meanLat * Math.PI / 180);
+      return Math.round(km2);
+    } catch { return 0; }
+  };
+
+  const checkAoiSize = (geometry, ds, isTimeSeries = false) => {
+    if (!geometry || !ds) return null;
+    const limits = AOI_LIMITS[ds];
+    if (!limits) return null;
+    const area = getAoiAreaKm2(geometry);
+    if (area === 0) return null;
+    const limit = isTimeSeries ? limits.timeseries : limits.single;
+    if (area > limit) {
+      const dsLabel = DATASET_CONFIG[ds]?.label || ds;
+      return `AOI too large (${area.toLocaleString()} km²). Maximum for ${dsLabel} ${isTimeSeries ? "time series" : "visualization"} is ${limit.toLocaleString()} km². Please draw a smaller area or switch to a lower resolution dataset.`;
+    }
+    return null;
+  };
+
   const getPropName = (lvl) => lvl === "adm1" ? "ADM1_EN" : lvl === "adm2" ? "ADM2_EN" : "ADM3_EN";
   const normalizeColor = (c) => c?.startsWith("#") ? c : /^[0-9A-Fa-f]{6}$/.test(c) ? `#${c}` : c || "#ccc";
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -170,6 +234,22 @@ export default function Maps() {
   useEffect(() => {
     setTimeout(() => mapRef.current?.invalidateSize(), 320);
   }, [sidebarOpen, resultsOpen]);
+
+  // ── Firebase auth state listener ──
+  useEffect(() => {
+    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
+      setUser(u || null);
+      if (u) {
+        // Save email to Airtable on first sign-in
+        const key = `hwasat_logged_${u.uid}`;
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, "1");
+          saveEmailToBackend(u.email, "google_signin");
+        }
+      }
+    });
+    return unsub;
+  }, []);
 
   // ── Drawing Tools Engine ──
   useEffect(() => {
@@ -522,6 +602,8 @@ export default function Maps() {
       finally { setLoading(false); }
       return;
     }
+    const aoiErrV = checkAoiSize(geometry, dataset, false);
+    if (aoiErrV) return setMessage(aoiErrV);
     if (!validateDates()) return;
     setLoading(true); setMessage(null);
     try {
@@ -537,13 +619,25 @@ export default function Maps() {
       if (!data.tiles && !data.mode_tiles) throw new Error(`No tiles for ${dataset} ${index}`);
       addOverlayAndLegend(data, dataset);
       setMessage("Layer loaded successfully.");
-    } catch (e) { setMessage(`Failed: ${e.message}`); }
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.includes("abort") || msg.includes("timeout"))
+        setMessage("Request timed out. Try a smaller area or shorter date range.");
+      else if (msg.includes("No") && (msg.includes("images") || msg.includes("data")))
+        setMessage(`No ${DATASET_CONFIG[dataset]?.label || dataset} data found for this area and date range. Try a longer period or different dates.`);
+      else if (msg.includes("cloud"))
+        setMessage("Insufficient cloud-free imagery for this period. Try a longer date range or different season.");
+      else setMessage(`Failed to load layer: ${msg}`);
+    }
     finally { setLoading(false); }
   };
 
   // ── Download ──
   const handleDownloadClick = () => {
-    requireEmail("download_geotiff", () => _doDownload());
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    const aoiErr = checkAoiSize(geometry, dataset, false);
+    if (aoiErr) return setMessage(aoiErr);
+    requireAuth("download_geotiff", () => _doDownload());
   };
 
   const _doDownload = async () => {
@@ -596,7 +690,14 @@ export default function Maps() {
       document.body.appendChild(a); a.click(); a.remove();
       window.URL.revokeObjectURL(url);
       setMessage("Download successful!");
-    } catch (e) { setMessage(`Notice: ${e.message}`); }
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.includes("abort") || msg.includes("timeout"))
+        setMessage("Download timed out. Your area may be too large. Try a smaller region.");
+      else if (msg.includes("All tiles failed"))
+        setMessage("Download failed — no data available for this area and date range.");
+      else setMessage(`Download failed: ${msg}`);
+    }
     finally { setLoading(false); }
   };
 
@@ -654,12 +755,19 @@ export default function Maps() {
 
 
   // ── Time Series ──
-  const handleTimeSeries = async () => {
+  const handleTimeSeries = () => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
     if (!dataset || !index) return setMessage("Select dataset and index");
     if (!fromYear || !toYear) return setMessage("Select date range");
     if (dataset === "landcover") return setMessage("Time series not available for land cover");
+    const aoiErr = checkAoiSize(geometry, dataset, true);
+    if (aoiErr) return setMessage(aoiErr);
+    requireAuth("time_series", () => _doTimeSeries());
+  };
+
+  const _doTimeSeries = async () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     setTsLoading(true);
     setTsData(null);
     setActiveTab("timeseries");
@@ -678,15 +786,27 @@ export default function Maps() {
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setTsData(data);
       setMessage("Time series loaded successfully.");
-    } catch (e) { setMessage(`Time series failed: ${e.message}`); }
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.includes("abort") || msg.includes("timeout")) setMessage("Request timed out. Try a smaller area or shorter date range.");
+      else if (msg.includes("No") && msg.includes("data")) setMessage("No data available for this area and date range. Try adjusting your selection.");
+      else setMessage(`Time series failed: ${msg}`);
+    }
     finally { setTsLoading(false); }
   };
 
   // ── Land Cover Change Stats ──
-  const handleLandcoverStats = async () => {
+  const handleLandcoverStats = () => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
     if (!fromYear || !toYear || !fromYear2 || !toYear2) return setMessage("Select both period date ranges");
+    const aoiErr = checkAoiSize(geometry, "landcover", false);
+    if (aoiErr) return setMessage(aoiErr);
+    requireAuth("landcover_stats", () => _doLandcoverStats());
+  };
+
+  const _doLandcoverStats = async () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     setStatsLoading(true);
     setStatsData(null);
     setActiveTab("changestats");
@@ -706,7 +826,11 @@ export default function Maps() {
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setStatsData(data);
       setMessage("Land cover statistics loaded successfully.");
-    } catch (e) { setMessage(`Stats failed: ${e.message}`); }
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.includes("abort") || msg.includes("timeout")) setMessage("Request timed out. Try a smaller area or shorter date range.");
+      else setMessage(`Stats failed: ${msg}`);
+    }
     finally { setStatsLoading(false); }
   };
 
@@ -891,6 +1015,19 @@ export default function Maps() {
       a.click();
       URL.revokeObjectURL(url);
     });
+  };
+
+  // ── Friendly error message helper ──
+  const friendlyError = (msg) => {
+    if (!msg) return null;
+    if (msg.includes("abort") || msg.includes("timeout")) return "Request timed out. Try a smaller area or shorter date range.";
+    if (msg.includes("No Sentinel-2")) return "No cloud-free Sentinel-2 images found. Try a longer date range or different season.";
+    if (msg.includes("No Landsat")) return "No Landsat data found for this area and date range.";
+    if (msg.includes("No CHIRPS")) return "No climate data found for this area. CHIRPS covers land areas only.";
+    if (msg.includes("No MODIS")) return "No MODIS data found. Check that your date range is after February 2000.";
+    if (msg.includes("No Dynamic World")) return "No land cover data found for this area and date range.";
+    if (msg.includes("AOI too large")) return msg;
+    return msg;
   };
 
   const SIDEBAR_W = 300;
@@ -1566,74 +1703,106 @@ export default function Maps() {
           </div>
         </div>
       </div>
-{/* ── Email Capture Modal ── */}
-        {emailModalOpen && (
+        {/* ── Google Sign-in Modal ── */}
+        {authModalOpen && (
           <div style={{
             position: "fixed", inset: 0, zIndex: 9999,
-            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
             display: "flex", alignItems: "center", justifyContent: "center",
-          }} onClick={(e) => { if (e.target === e.currentTarget) setEmailModalOpen(false); }}>
+          }} onClick={(e) => { if (e.target === e.currentTarget) { setAuthModalOpen(false); setPendingAction(null); } }}>
             <div style={{
-              background: "white", borderRadius: 16, padding: "36px 32px",
-              width: 380, boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
-              fontFamily: "sans-serif", position: "relative",
+              background: "white", borderRadius: 20, padding: "40px 36px",
+              width: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.3)",
+              fontFamily: "sans-serif", position: "relative", textAlign: "center",
             }}>
               {/* Close */}
-              <button onClick={() => setEmailModalOpen(false)} style={{
+              <button onClick={() => { setAuthModalOpen(false); setPendingAction(null); }} style={{
                 position: "absolute", top: 14, right: 16, background: "none",
-                border: "none", fontSize: 20, cursor: "pointer", color: "#9ca3af",
+                border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af",
               }}>×</button>
 
-              {/* Icon */}
-              <div style={{ textAlign: "center", marginBottom: 16 }}>
-                <div style={{
-                  width: 52, height: 52, borderRadius: "50%",
-                  background: "#f0fdf4", margin: "0 auto 12px",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#111" }}>Almost there</div>
-                <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
-                  Enter your email to download data.<br/>We'll never spam you.
-                </div>
+              {/* Logo mark */}
+              <div style={{
+                width: 56, height: 56, borderRadius: "50%", background: "#f0fdf4",
+                margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
 
-              {/* Input */}
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleEmailSubmit()}
-                autoFocus
-                style={{
-                  width: "100%", padding: "11px 14px", fontSize: 14,
-                  border: "1.5px solid #e5e7eb", borderRadius: 9,
-                  outline: "none", boxSizing: "border-box", marginBottom: 12,
-                  fontFamily: "sans-serif",
-                }}
-              />
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 8 }}>Sign in to continue</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 28, lineHeight: 1.6 }}>
+                Time series, statistics, downloads and exports<br/>require a free account.
+              </div>
 
-              {/* Button */}
-              <button onClick={handleEmailSubmit} disabled={!emailInput.includes("@")} style={{
-                width: "100%", padding: "12px", borderRadius: 9, border: "none",
-                background: emailInput.includes("@") ? "#22c55e" : "#e5e7eb",
-                color: emailInput.includes("@") ? "white" : "#9ca3af",
-                fontSize: 14, fontWeight: 700, cursor: emailInput.includes("@") ? "pointer" : "default",
+              {/* Google Sign-in button */}
+              <button onClick={handleGoogleSignIn} disabled={authLoading} style={{
+                width: "100%", padding: "13px 16px", borderRadius: 10,
+                border: "1.5px solid #e5e7eb", background: authLoading ? "#f9fafb" : "white",
+                cursor: authLoading ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+                fontSize: 15, fontWeight: 600, color: "#374151",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
                 transition: "all 0.15s",
               }}>
-                Continue →
+                {authLoading ? (
+                  <span>Signing in...</span>
+                ) : (
+                  <>
+                    {/* Google G logo */}
+                    <svg width="20" height="20" viewBox="0 0 48 48">
+                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                    </svg>
+                    Continue with Google
+                  </>
+                )}
               </button>
 
-              <div style={{ textAlign: "center", fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-                Free forever. No account needed.
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 16 }}>
+                Free forever · No credit card required
               </div>
             </div>
           </div>
         )}
+
+        {/* ── User avatar (top-right of map) ── */}
+        <div style={{
+          position: "absolute", top: 10, right: resultsOpen ? 330 : 10, zIndex: 1000,
+          transition: "right 0.3s",
+        }}>
+          {user ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8,
+              background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",
+            }}>
+              {user.photoURL
+                ? <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+                : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.displayName?.[0] || "U"}</div>
+              }
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {user.displayName?.split(" ")[0] || user.email}
+              </span>
+              <button onClick={handleSignOut} style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 11, color: "#9ca3af", padding: "2px 4px",
+              }}>Sign out</button>
+            </div>
+          ) : (
+            <button onClick={() => setAuthModalOpen(true)} style={{
+              background: "white", border: "1.5px solid #e5e7eb", borderRadius: 24,
+              padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#374151",
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+              fontFamily: "sans-serif",
+            }}>
+              Sign in
+            </button>
+          )}
+        </div>
+
     </div>
   );
 }
