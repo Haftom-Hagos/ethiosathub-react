@@ -43,6 +43,7 @@ export default function Maps() {
   const drawnLayerRef = useRef(null);
   const drawingStateRef = useRef({ active: false, type: null, points: [], tempLayer: null });
   const [activeTool, setActiveTool] = useState(null); // 'rectangle'|'polygon'|'circle'|'point'
+  const [drawnLayerExists, setDrawnLayerExists] = useState(false);
 
   // ── UI state ──
   const [darkMode, setDarkMode] = useState(false);
@@ -251,10 +252,11 @@ export default function Maps() {
       if (drawnLayerRef.current) map.removeLayer(drawnLayerRef.current);
       // Add final layer
       const layer = L.geoJSON(geojson, {
-        style: { color: "#ef4444", weight: 2.5, fillOpacity: 0.15 },
+        style: { color: "#ef4444", weight: 2.5, fillOpacity: 0, dashArray: "6,3" },
         pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 8, color: "#ef4444", fillOpacity: 0.6 }),
       }).addTo(map);
       drawnLayerRef.current = layer;
+      setDrawnLayerExists(true);
       // Set as active AOI (reuse customGeoJSON pathway)
       setCustomGeoJSON(geojson);
       setUseCustomGeoJSON(true);
@@ -450,7 +452,7 @@ export default function Maps() {
     if (!useCustomGeoJSON || !customGeoJSON || !mapRef.current) return;
     const map = mapRef.current;
     if (boundaryLayersCache.current.custom) map.removeLayer(boundaryLayersCache.current.custom);
-    const layer = L.geoJSON(customGeoJSON, { style: { color: "#ef4444", weight: 3, fillOpacity: 0.15 } }).addTo(map);
+    const layer = L.geoJSON(customGeoJSON, { style: { color: "#ef4444", weight: 2.5, fillOpacity: 0, dashArray: "6,3" } }).addTo(map);
     boundaryLayersCache.current.custom = layer;
     map.fitBounds(layer.getBounds());
   }, [customGeoJSON, useCustomGeoJSON]);
@@ -1241,7 +1243,7 @@ export default function Maps() {
 
           {/* ── Action Buttons ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button onClick={handleViewSelection} disabled={loading}
+            <button onClick={() => handleViewSelection()} disabled={loading}
               style={{ background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
               <Icon d={icons.eye} size={14} /> View Selection
             </button>
@@ -1354,10 +1356,21 @@ export default function Maps() {
               {svg}
             </button>
           ))}
-          {drawnLayerRef.current && (
+          {drawnLayerExists && (
             <button title="Clear drawn AOI" onClick={() => {
-              if (drawnLayerRef.current) { mapRef.current.removeLayer(drawnLayerRef.current); drawnLayerRef.current = null; }
-              setCustomGeoJSON(null); setUseCustomGeoJSON(false); setActiveTool(null);
+              if (drawnLayerRef.current) {
+                try { mapRef.current.removeLayer(drawnLayerRef.current); } catch {}
+                drawnLayerRef.current = null;
+              }
+              // Also remove from boundary cache
+              if (boundaryLayersCache.current.custom) {
+                try { mapRef.current.removeLayer(boundaryLayersCache.current.custom); } catch {}
+                delete boundaryLayersCache.current.custom;
+              }
+              setDrawnLayerExists(false);
+              setCustomGeoJSON(null);
+              setUseCustomGeoJSON(false);
+              setActiveTool(null);
             }} style={{
               width: 32, height: 32, borderRadius: 6, border: "2px solid rgba(0,0,0,0.25)",
               background: "white", color: "#888", cursor: "pointer",
