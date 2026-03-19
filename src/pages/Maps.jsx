@@ -60,6 +60,8 @@ export default function Maps() {
   const [selectedFeatureGeoJSON, setSelectedFeatureGeoJSON] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [aoiWarning, setAoiWarning] = useState(null); // {message, onProceed}
+  const [aoiAreaKm2, setAoiAreaKm2] = useState(null); // shown in sidebar
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailPendingAction, setEmailPendingAction] = useState(null);
@@ -147,12 +149,16 @@ export default function Maps() {
   };
 
   // ── AOI size limits per dataset (km²) ──
+  // warn = soft warning shown immediately (Option B)
+  // view = hard block for visualization
+  // timeseries = hard block for time series
+  // download = hard block for download
   const AOI_LIMITS = {
-    sentinel2: { download: 5000,   timeseries: 2000  },
-    landsat:   { download: 20000,  timeseries: 10000 },
-    modis:     { download: 200000, timeseries: 100000},
-    landcover: { download: 5000,   timeseries: 2000  },
-    climate:   { download: 500000, timeseries: 300000},
+    sentinel2: { warn: 1500,   view: 2000,   timeseries: 500,    download: 1000   },
+    landsat:   { warn: 7500,   view: 10000,  timeseries: 3000,   download: 5000   },
+    modis:     { warn: 75000,  view: 100000, timeseries: 50000,  download: 80000  },
+    landcover: { warn: 3500,   view: 5000,   timeseries: 2000,   download: 3000   },
+    climate:   { warn: 200000, view: 300000, timeseries: 100000, download: 200000 },
   };
 
   // Approximate AOI area in km² from GeoJSON geometry
@@ -176,16 +182,29 @@ export default function Maps() {
     } catch { return 0; }
   };
 
-  const checkAoiSize = (geometry, ds, isTimeSeries = false) => {
+  // mode: "view" | "timeseries" | "download"
+  // returns: { type: "block"|"warn", message: string } | null
+  const checkAoiSize = (geometry, ds, mode = "view") => {
     if (!geometry || !ds) return null;
     const limits = AOI_LIMITS[ds];
     if (!limits) return null;
     const area = getAoiAreaKm2(geometry);
     if (area === 0) return null;
-    const limit = isTimeSeries ? limits.timeseries : limits.download;
-    if (area > limit) {
-      const dsLabel = DATASET_CONFIG[ds]?.label || ds;
-      return `AOI too large (${area.toLocaleString()} km²). Maximum for ${dsLabel} ${isTimeSeries ? "time series" : "visualization"} is ${limit.toLocaleString()} km². Please draw a smaller area or switch to a lower resolution dataset.`;
+    const dsLabel = DATASET_CONFIG[ds]?.label || ds;
+    const hardLimit = limits[mode] || limits.view;
+    if (area > hardLimit) {
+      return {
+        type: "block",
+        area,
+        message: `AOI too large (${area.toLocaleString()} km²). Maximum for ${dsLabel} ${mode} is ${hardLimit.toLocaleString()} km². Please select a smaller area or switch to a lower resolution dataset like ${ds === "sentinel2" ? "Landsat or MODIS" : ds === "landsat" ? "MODIS" : "a coarser dataset"}.`,
+      };
+    }
+    if (area > limits.warn) {
+      return {
+        type: "warn",
+        area,
+        message: `Your area is ${area.toLocaleString()} km² which is large for ${dsLabel}. This may take several minutes. Continue anyway?`,
+      };
     }
     return null;
   };
@@ -445,6 +464,14 @@ export default function Maps() {
     mapRef.current?.fitBounds(lyr.getBounds());
   }, [featureName, adminLevel, useCustomGeoJSON]);
 
+  // ── Compute AOI area for display ──
+  useEffect(() => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry) { setAoiAreaKm2(null); return; }
+    const area = getAoiAreaKm2(geometry);
+    setAoiAreaKm2(area > 0 ? area : null);
+  }, [customGeoJSON, selectedFeatureGeoJSON, useCustomGeoJSON]);
+
   // ── Validate dates ──
   const validateDates = () => {
     if (!dataset || !fromYear || !toYear) return true;
@@ -537,11 +564,20 @@ export default function Maps() {
   };
 
   // ── View Selection ──
-  const handleViewSelection = async () => {
+  const handleViewSelection = async (skipAoiCheck = false) => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
     if (!dataset || !index) return setMessage("Select dataset and index");
     if (!fromYear || !toYear) return setMessage("Select date range");
+    // AOI size check — instant, before any network call
+    if (!skipAoiCheck && dataset) {
+      const aoiCheck = checkAoiSize(geometry, dataset, "view");
+      if (aoiCheck?.type === "block") return setMessage(aoiCheck.message);
+      if (aoiCheck?.type === "warn") {
+        setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); handleViewSelection(true); } });
+        return;
+      }
+    }
     if (changeMode) {
       if (dataset === "landcover") return setMessage("Change detection not available for land cover");
       if (!fromYear2 || !toYear2) return setMessage("Select Period 2 years");
@@ -601,8 +637,12 @@ export default function Maps() {
   // ── Download ──
   const handleDownloadClick = () => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
-    const aoiErr = checkAoiSize(geometry, dataset, false);
-    if (aoiErr) return setMessage(aoiErr);
+    const aoiCheck = checkAoiSize(geometry, dataset, "download");
+    if (aoiCheck?.type === "block") return setMessage(aoiCheck.message);
+    if (aoiCheck?.type === "warn") {
+      setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); requireAuth("download_geotiff", () => _doDownload()); } });
+      return;
+    }
     requireAuth("download_geotiff", () => _doDownload());
   };
 
@@ -727,8 +767,12 @@ export default function Maps() {
     if (!dataset || !index) return setMessage("Select dataset and index");
     if (!fromYear || !toYear) return setMessage("Select date range");
     if (dataset === "landcover") return setMessage("Time series not available for land cover");
-    const aoiErr = checkAoiSize(geometry, dataset, true);
-    if (aoiErr) return setMessage(aoiErr);
+    const aoiCheck = checkAoiSize(geometry, dataset, "timeseries");
+    if (aoiCheck?.type === "block") return setMessage(aoiCheck.message);
+    if (aoiCheck?.type === "warn") {
+      setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); requireAuth("time_series", () => _doTimeSeries()); } });
+      return;
+    }
     requireAuth("time_series", () => _doTimeSeries());
   };
 
@@ -767,8 +811,12 @@ export default function Maps() {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
     if (!fromYear || !toYear || !fromYear2 || !toYear2) return setMessage("Select both period date ranges");
-    const aoiErr = checkAoiSize(geometry, "landcover", false);
-    if (aoiErr) return setMessage(aoiErr);
+    const aoiCheck = checkAoiSize(geometry, "landcover", "view");
+    if (aoiCheck?.type === "block") return setMessage(aoiCheck.message);
+    if (aoiCheck?.type === "warn") {
+      setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); requireAuth("landcover_stats", () => _doLandcoverStats()); } });
+      return;
+    }
     requireAuth("landcover_stats", () => _doLandcoverStats());
   };
 
@@ -1079,6 +1127,47 @@ export default function Maps() {
               </>
             )}
           </div>
+
+          {/* ── AOI Area Display ── */}
+          {aoiAreaKm2 && dataset && (
+            <div style={{
+              marginBottom: 12, padding: "8px 12px", borderRadius: 8,
+              background: (() => {
+                const limits = AOI_LIMITS[dataset];
+                if (!limits) return t.card;
+                if (aoiAreaKm2 > limits.view) return darkMode ? "rgba(239,68,68,0.15)" : "#fef2f2";
+                if (aoiAreaKm2 > limits.warn) return darkMode ? "rgba(234,179,8,0.15)" : "#fefce8";
+                return darkMode ? "rgba(34,197,94,0.1)" : "#f0fdf4";
+              })(),
+              border: `1px solid ${(() => {
+                const limits = AOI_LIMITS[dataset];
+                if (!limits) return t.border;
+                if (aoiAreaKm2 > limits.view) return "#fca5a5";
+                if (aoiAreaKm2 > limits.warn) return "#fde047";
+                return "#86efac";
+              })()}`,
+              fontFamily: "sans-serif",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span style={{ fontSize: 11, color: t.muted }}>Selected area</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: (() => {
+                const limits = AOI_LIMITS[dataset];
+                if (!limits) return t.text;
+                if (aoiAreaKm2 > limits.view) return "#dc2626";
+                if (aoiAreaKm2 > limits.warn) return "#ca8a04";
+                return "#16a34a";
+              })() }}>
+                {aoiAreaKm2.toLocaleString()} km²
+              </span>
+            </div>
+          )}
+
+          {aoiAreaKm2 && !dataset && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 8, background: t.card, border: `1px solid ${t.border}`, fontFamily: "sans-serif", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 11, color: t.muted }}>Selected area</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{aoiAreaKm2.toLocaleString()} km²</span>
+            </div>
+          )}
 
           {/* ── Dataset & Index ── */}
           <div style={sectionStyle}>
@@ -1673,6 +1762,52 @@ export default function Maps() {
           </div>
         </div>
       </div>
+        {/* ── AOI Warning Modal ── */}
+        {aoiWarning && (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 9998,
+            background: "rgba(0,0,0,0.45)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} onClick={(e) => { if (e.target === e.currentTarget) setAoiWarning(null); }}>
+            <div style={{
+              background: "white", borderRadius: 16, padding: "32px 28px",
+              width: 400, boxShadow: "0 24px 60px rgba(0,0,0,0.2)",
+              fontFamily: "sans-serif", position: "relative",
+            }}>
+              <button onClick={() => setAoiWarning(null)} style={{
+                position: "absolute", top: 14, right: 16, background: "none",
+                border: "none", fontSize: 20, cursor: "pointer", color: "#9ca3af",
+              }}>×</button>
+              {/* Icon */}
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#fefce8", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "#111" }}>Large Area Warning</div>
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.7, marginBottom: 24, textAlign: "center" }}>
+                {aoiWarning.message}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setAoiWarning(null)} style={{
+                  flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e5e7eb",
+                  background: "white", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}>
+                  Cancel
+                </button>
+                <button onClick={aoiWarning.onProceed} style={{
+                  flex: 1, padding: "11px", borderRadius: 9, border: "none",
+                  background: "#ca8a04", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}>
+                  Proceed Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Email Capture Modal ── */}
         {emailModalOpen && (
           <div style={{
