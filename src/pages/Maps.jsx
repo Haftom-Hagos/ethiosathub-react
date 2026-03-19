@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
 
-const BACKEND_URL = "https://hwasat-backend-zyllfsjfha-ew.a.run.app";
+const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 16, className = "" }) => (
