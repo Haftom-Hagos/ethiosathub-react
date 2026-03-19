@@ -14,9 +14,14 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_ID,
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
-const firebaseApp  = initializeApp(firebaseConfig);
-const firebaseAuth = getAuth(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
+let firebaseApp, firebaseAuth, googleProvider;
+try {
+  firebaseApp    = initializeApp(firebaseConfig);
+  firebaseAuth   = getAuth(firebaseApp);
+  googleProvider = new GoogleAuthProvider();
+} catch(e) {
+  console.error("Firebase init failed:", e);
+}
 
 const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
 
@@ -167,11 +172,11 @@ export default function Maps() {
 
   // ── AOI size limits per dataset (km²) ──
   const AOI_LIMITS = {
-    sentinel2: { single: 1000,   timeseries: 500   },
-    landsat:   { single: 5000,   timeseries: 2000  },
-    modis:     { single: 50000,  timeseries: 20000 },
-    landcover: { single: 1000,   timeseries: 500   },
-    climate:   { single: 500000, timeseries: 200000},
+    sentinel2: { download: 5000,   timeseries: 2000  },
+    landsat:   { download: 20000,  timeseries: 10000 },
+    modis:     { download: 200000, timeseries: 100000},
+    landcover: { download: 5000,   timeseries: 2000  },
+    climate:   { download: 500000, timeseries: 300000},
   };
 
   // Approximate AOI area in km² from GeoJSON geometry
@@ -201,7 +206,7 @@ export default function Maps() {
     if (!limits) return null;
     const area = getAoiAreaKm2(geometry);
     if (area === 0) return null;
-    const limit = isTimeSeries ? limits.timeseries : limits.single;
+    const limit = isTimeSeries ? limits.timeseries : limits.download;
     if (area > limit) {
       const dsLabel = DATASET_CONFIG[ds]?.label || ds;
       return `AOI too large (${area.toLocaleString()} km²). Maximum for ${dsLabel} ${isTimeSeries ? "time series" : "visualization"} is ${limit.toLocaleString()} km². Please draw a smaller area or switch to a lower resolution dataset.`;
@@ -237,6 +242,7 @@ export default function Maps() {
 
   // ── Firebase auth state listener ──
   useEffect(() => {
+    if (!firebaseAuth) return;
     const unsub = onAuthStateChanged(firebaseAuth, (u) => {
       setUser(u || null);
       if (u) {
@@ -602,8 +608,6 @@ export default function Maps() {
       finally { setLoading(false); }
       return;
     }
-    const aoiErrV = checkAoiSize(geometry, dataset, false);
-    if (aoiErrV) return setMessage(aoiErrV);
     if (!validateDates()) return;
     setLoading(true); setMessage(null);
     try {
@@ -1769,39 +1773,28 @@ export default function Maps() {
           </div>
         )}
 
-        {/* ── User avatar (top-right of map) ── */}
-        <div style={{
-          position: "absolute", top: 10, right: resultsOpen ? 330 : 10, zIndex: 1000,
-          transition: "right 0.3s",
-        }}>
-          {user ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8,
-              background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",
-            }}>
-              {user.photoURL
-                ? <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%" }} />
-                : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.displayName?.[0] || "U"}</div>
-              }
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {user.displayName?.split(" ")[0] || user.email}
-              </span>
-              <button onClick={handleSignOut} style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: 11, color: "#9ca3af", padding: "2px 4px",
-              }}>Sign out</button>
-            </div>
-          ) : (
-            <button onClick={() => setAuthModalOpen(true)} style={{
-              background: "white", border: "1.5px solid #e5e7eb", borderRadius: 24,
-              padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#374151",
-              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-              fontFamily: "sans-serif",
-            }}>
-              Sign in
-            </button>
-          )}
-        </div>
+        {/* ── User avatar — only shown when signed in ── */}
+        {user && (
+          <div style={{
+            position: "absolute", top: 10, right: resultsOpen ? 330 : 10, zIndex: 1000,
+            transition: "right 0.3s",
+            display: "flex", alignItems: "center", gap: 8,
+            background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",
+          }}>
+            {user.photoURL
+              ? <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+              : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.displayName?.[0] || "U"}</div>
+            }
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.displayName?.split(" ")[0] || user.email}
+            </span>
+            <button onClick={handleSignOut} style={{
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 11, color: "#9ca3af", padding: "2px 4px",
+            }}>Sign out</button>
+          </div>
+        )}
 
     </div>
   );
