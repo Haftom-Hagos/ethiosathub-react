@@ -1368,7 +1368,7 @@ export default function Maps() {
                     📈 {tsLoading ? "Loading..." : "Time Series"}
                   </button>
                   <select value={tsInterval} onChange={e => setTsInterval(e.target.value)}
-                    style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer" }}>
+                    style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer", width: 110, flexShrink: 0 }}>
                     {/* Always available */}
                     <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
