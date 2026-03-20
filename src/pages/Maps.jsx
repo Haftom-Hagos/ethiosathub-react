@@ -417,6 +417,10 @@ export default function Maps() {
     const [minY, maxY] = cfg.yearRange;
     setYearOptions(Array.from({ length: maxY - minY + 1 }, (_, i) => maxY - i));
     setIndex("");
+    // Reset special intervals if switching away from MODIS
+    if (dataset !== "modis") {
+      setTsInterval(prev => (prev === "daily" || prev === "16day") ? "monthly" : prev);
+    }
   }, [dataset]);
 
   // ── Admin level → boundaries ──
@@ -466,6 +470,16 @@ export default function Maps() {
     layerFeatureMap.current.forEach((l, n) => l.setStyle({ color: n === featureName ? "#ef4444" : "#3b82f6", weight: n === featureName ? 3 : 1.2 }));
     mapRef.current?.fitBounds(lyr.getBounds());
   }, [featureName, adminLevel, useCustomGeoJSON]);
+
+  // ── Reset interval when index changes (MODIS daily/16day are index-specific) ──
+  useEffect(() => {
+    if (dataset === "modis") {
+      const dailyIndices = ["NDWI","NBR","NDMI","NDSI"];
+      const compositeIndices = ["NDVI","EVI"];
+      if (tsInterval === "daily" && !dailyIndices.includes(index)) setTsInterval("monthly");
+      if (tsInterval === "16day" && !compositeIndices.includes(index)) setTsInterval("monthly");
+    }
+  }, [index]);
 
   // ── Compute AOI area for display ──
   useEffect(() => {
@@ -1355,9 +1369,18 @@ export default function Maps() {
                   </button>
                   <select value={tsInterval} onChange={e => setTsInterval(e.target.value)}
                     style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer" }}>
+                    {/* Always available */}
                     <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
                     <option value="seasonal">Seasonal</option>
+                    {/* MODIS NDVI/EVI only — 16-day composite matches MOD13Q1 product */}
+                    {dataset === "modis" && ["NDVI","EVI"].includes(index) && (
+                      <option value="16day">16-Day (MODIS composite)</option>
+                    )}
+                    {/* MODIS NDWI/NBR/NDMI/NDSI only — daily from MOD09GA */}
+                    {dataset === "modis" && ["NDWI","NBR","NDMI","NDSI"].includes(index) && (
+                      <option value="daily">Daily (max 1 year)</option>
+                    )}
                   </select>
                 </div>
                 {/* Seasonal month range picker */}
