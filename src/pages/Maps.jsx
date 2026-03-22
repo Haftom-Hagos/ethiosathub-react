@@ -9,7 +9,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 let _fbAuth = null;
 let _fbProvider = null;
 try {
-  const _fbConfig = {
+  const _fbCfg = {
     apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
     projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -17,9 +17,9 @@ try {
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_ID,
     appId:             import.meta.env.VITE_FIREBASE_APP_ID,
   };
-  const _fbApp = getApps().length === 0 ? initializeApp(_fbConfig) : getApps()[0];
-  _fbAuth     = getAuth(_fbApp);
-  _fbProvider = new GoogleAuthProvider();
+  const _fbApp  = getApps().length === 0 ? initializeApp(_fbCfg) : getApps()[0];
+  _fbAuth       = getAuth(_fbApp);
+  _fbProvider   = new GoogleAuthProvider();
 } catch (e) {
   console.warn("Firebase init failed — auth disabled:", e);
 }
@@ -1099,7 +1099,7 @@ export default function Maps() {
     } catch (e) { setMessage(`Change map failed: ${e.message}`); }
     finally { setChangeMapLoading(false); }
   };
-  // ── Auth + email tracking ──
+// ── Auth + email tracking ──
   const saveEmail = async (email, action) => {
     try {
       await fetch(`${BACKEND_URL}/capture_email`, {
@@ -1110,7 +1110,7 @@ export default function Maps() {
     } catch (e) { console.warn("Email save failed:", e); }
   };
 
-  // Listen to Firebase auth state changes
+  // Firebase auth state listener
   useEffect(() => {
     if (!_fbAuth) return;
     const unsub = onAuthStateChanged(_fbAuth, (u) => {
@@ -1137,7 +1137,7 @@ export default function Maps() {
     }
   };
 
-  // Alias so CSV export buttons still work
+  // Alias so CSV export buttons keep working
   const requireEmail = requireAuth;
 
   const handleGoogleSignIn = async () => {
@@ -1160,6 +1160,7 @@ export default function Maps() {
     setUser(null);
   };
 
+  // Fallback email submit (kept for emailModalOpen legacy path)
   const handleEmailSubmit = async () => {
     const email = emailInput.trim();
     if (!email || !email.includes("@")) return;
@@ -1167,20 +1168,6 @@ export default function Maps() {
     setEmailModalOpen(false);
     await saveEmail(email, "email_capture");
     if (emailPendingAction) { emailPendingAction(); setEmailPendingAction(null); }
-    setEmailInput("");
-  };
-
-
-  const handleEmailSubmit = async () => {
-    const email = emailInput.trim();
-    if (!email || !email.includes("@")) return;
-    localStorage.setItem("hwasat_user_email", email);
-    setEmailModalOpen(false);
-    await saveEmail(email, "download_or_export");
-    if (emailPendingAction) {
-      emailPendingAction();
-      setEmailPendingAction(null);
-    }
     setEmailInput("");
   };
 
@@ -2029,7 +2016,6 @@ export default function Maps() {
                 border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af",
               }}>×</button>
 
-              {/* Logo mark */}
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#f0fdf4", margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2041,7 +2027,6 @@ export default function Maps() {
                 Time series, statistics, downloads and exports<br/>require a free account.
               </div>
 
-              {/* Google button */}
               <button onClick={handleGoogleSignIn} disabled={authLoading} style={{
                 width: "100%", padding: "13px 16px", borderRadius: 10,
                 border: "1.5px solid #e5e7eb", background: authLoading ? "#f9fafb" : "white",
