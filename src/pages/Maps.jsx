@@ -2,6 +2,27 @@ import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+
+// ── Firebase init (safe — won't crash if env vars missing) ──
+let _fbAuth = null;
+let _fbProvider = null;
+try {
+  const _fbConfig = {
+    apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_ID,
+    appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  };
+  const _fbApp = getApps().length === 0 ? initializeApp(_fbConfig) : getApps()[0];
+  _fbAuth     = getAuth(_fbApp);
+  _fbProvider = new GoogleAuthProvider();
+} catch (e) {
+  console.warn("Firebase init failed — auth disabled:", e);
+}
 
 
 const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
@@ -43,6 +64,7 @@ export default function Maps() {
   const drawnLayerRef = useRef(null);
   const drawingStateRef = useRef({ active: false, type: null, points: [], tempLayer: null });
   const [activeTool, setActiveTool] = useState(null); // 'rectangle'|'polygon'|'circle'|'point'
+  const [drawnLayerExists, setDrawnLayerExists] = useState(false);
 
   // ── UI state ──
   const [darkMode, setDarkMode] = useState(false);
@@ -62,9 +84,14 @@ export default function Maps() {
   const [message, setMessage] = useState(null);
   const [aoiWarning, setAoiWarning] = useState(null); // {message, onProceed}
   const [aoiAreaKm2, setAoiAreaKm2] = useState(null); // shown in sidebar
+  const [metadataLoading, setMetadataLoading] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailPendingAction, setEmailPendingAction] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authPendingAction, setAuthPendingAction] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
   const [useCustomGeoJSON, setUseCustomGeoJSON] = useState(false);
   const [customGeoJSON, setCustomGeoJSON] = useState(null);
   const fileInputRef = useRef(null);
@@ -154,11 +181,11 @@ export default function Maps() {
   // timeseries = hard block for time series
   // download = hard block for download
   const AOI_LIMITS = {
-    sentinel2: { warn: 1500,   view: 2000,   timeseries: 500,    download: 1000   },
-    landsat:   { warn: 7500,   view: 10000,  timeseries: 3000,   download: 5000   },
-    modis:     { warn: 75000,  view: 100000, timeseries: 50000,  download: 80000  },
-    landcover: { warn: 3500,   view: 5000,   timeseries: 2000,   download: 3000   },
-    climate:   { warn: 200000, view: 300000, timeseries: 100000, download: 200000 },
+    sentinel2: { warn: 4500,   view: 6000,   timeseries: 1500,   download: 3000   },
+    landsat:   { warn: 15000,  view: 20000,  timeseries: 6000,   download: 10000  },
+    modis:     { warn: 150000, view: 200000, timeseries: 80000,  download: 120000 },
+    landcover: { warn: 7500,   view: 10000,  timeseries: 3000,   download: 6000   },
+    climate:   { warn: 300000, view: 400000, timeseries: 150000, download: 250000 },
   };
 
   // Approximate AOI area in km² from GeoJSON geometry
@@ -251,10 +278,11 @@ export default function Maps() {
       if (drawnLayerRef.current) map.removeLayer(drawnLayerRef.current);
       // Add final layer
       const layer = L.geoJSON(geojson, {
-        style: { color: "#ef4444", weight: 2.5, fillOpacity: 0.15 },
+        style: { color: "#ef4444", weight: 2.5, fillOpacity: 0, dashArray: "6,3" },
         pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 8, color: "#ef4444", fillOpacity: 0.6 }),
       }).addTo(map);
       drawnLayerRef.current = layer;
+      setDrawnLayerExists(true);
       // Set as active AOI (reuse customGeoJSON pathway)
       setCustomGeoJSON(geojson);
       setUseCustomGeoJSON(true);
@@ -414,6 +442,10 @@ export default function Maps() {
     const [minY, maxY] = cfg.yearRange;
     setYearOptions(Array.from({ length: maxY - minY + 1 }, (_, i) => maxY - i));
     setIndex("");
+    // Reset special intervals if switching away from MODIS
+    if (dataset !== "modis") {
+      setTsInterval(prev => (prev === "daily" || prev === "16day") ? "monthly" : prev);
+    }
   }, [dataset]);
 
   // ── Admin level → boundaries ──
@@ -450,7 +482,7 @@ export default function Maps() {
     if (!useCustomGeoJSON || !customGeoJSON || !mapRef.current) return;
     const map = mapRef.current;
     if (boundaryLayersCache.current.custom) map.removeLayer(boundaryLayersCache.current.custom);
-    const layer = L.geoJSON(customGeoJSON, { style: { color: "#ef4444", weight: 3, fillOpacity: 0.15 } }).addTo(map);
+    const layer = L.geoJSON(customGeoJSON, { style: { color: "#ef4444", weight: 2.5, fillOpacity: 0, dashArray: "6,3" } }).addTo(map);
     boundaryLayersCache.current.custom = layer;
     map.fitBounds(layer.getBounds());
   }, [customGeoJSON, useCustomGeoJSON]);
@@ -463,6 +495,16 @@ export default function Maps() {
     layerFeatureMap.current.forEach((l, n) => l.setStyle({ color: n === featureName ? "#ef4444" : "#3b82f6", weight: n === featureName ? 3 : 1.2 }));
     mapRef.current?.fitBounds(lyr.getBounds());
   }, [featureName, adminLevel, useCustomGeoJSON]);
+
+  // ── Reset interval when index changes (MODIS daily/16day are index-specific) ──
+  useEffect(() => {
+    if (dataset === "modis") {
+      const dailyIndices = ["NDWI","NBR","NDMI","NDSI"];
+      const compositeIndices = ["NDVI","EVI"];
+      if (tsInterval === "daily" && !dailyIndices.includes(index)) setTsInterval("monthly");
+      if (tsInterval === "16day" && !compositeIndices.includes(index)) setTsInterval("monthly");
+    }
+  }, [index]);
 
   // ── Compute AOI area for display ──
   useEffect(() => {
@@ -564,6 +606,24 @@ export default function Maps() {
   };
 
   // ── View Selection ──
+  // ── Async metadata fetch — called after tiles load ──
+  const fetchMetadataAsync = async (ds, start, end, geometry) => {
+    if (!ds || ds === "landcover" || ds === "climate") return;
+    setMetadataLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/metadata`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: ds, startDate: start, endDate: end, geometry,
+        }),
+      });
+      if (!res.ok) return;
+      const meta = await res.json();
+      setResultsData(prev => prev ? { ...prev, metadata: meta } : prev);
+    } catch (e) { console.warn("Metadata fetch failed:", e); }
+    finally { setMetadataLoading(false); }
+  };
+
   const handleViewSelection = async (skipAoiCheck = false) => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
@@ -583,25 +643,96 @@ export default function Maps() {
       if (!fromYear2 || !toYear2) return setMessage("Select Period 2 years");
       if (!validateChangeDates()) return;
       setLoading(true); setMessage(null);
+      const map = mapRef.current;
+      // Clear old change layers
+      [p1LayerRef, p2LayerRef, changeLayerRef].forEach(ref => {
+        if (ref.current) { try { map.removeLayer(ref.current); } catch {} ref.current = null; }
+      });
       try {
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(), 300000);
-        const res = await fetch(`${BACKEND_URL}/change_detection`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dataset, index,
-            startDate1: `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`,
-            endDate1: `${toYear}-${toMonth || "12"}-${toDay || "31"}`,
-            startDate2: `${fromYear2}-${fromMonth2 || "01"}-${fromDay2 || "01"}`,
-            endDate2: `${toYear2}-${toMonth2 || "12"}-${toDay2 || "31"}`,
-            geometry,
-          }), signal: controller.signal,
+        const s1 = `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`;
+        const e1 = `${toYear}-${toMonth || "12"}-${toDay || "31"}`;
+        const s2 = `${fromYear2}-${fromMonth2 || "01"}-${fromDay2 || "01"}`;
+        const e2 = `${toYear2}-${toMonth2 || "12"}-${toDay2 || "31"}`;
+        // Fetch P1, P2, and change map in parallel
+        const [r1, r2, rC] = await Promise.all([
+          fetch(`${BACKEND_URL}/gee_layers`, { method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ dataset, index, startDate: s1, endDate: e1, geometry }) }),
+          fetch(`${BACKEND_URL}/gee_layers`, { method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ dataset, index, startDate: s2, endDate: e2, geometry }) }),
+          fetch(`${BACKEND_URL}/change_detection`, { method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ dataset, index, startDate1: s1, endDate1: e1, startDate2: s2, endDate2: e2, geometry }) }),
+        ]);
+        const [d1, d2, dC] = await Promise.all([r1.json(), r2.json(), rC.json()]);
+        if (!r1.ok) throw new Error(d1.detail || "Period 1 failed");
+        if (!r2.ok) throw new Error(d2.detail || "Period 2 failed");
+        if (!rC.ok) throw new Error(dC.detail || "Change map failed");
+
+        const url1 = d1.tiles || d1.mode_tiles;
+        const url2 = d2.tiles || d2.mode_tiles;
+        const urlC = dC.tiles;
+
+        // Remove existing overlay/legend/control
+        if (overlayRef.current) { try { map.removeLayer(overlayRef.current); } catch {} }
+        if (legendRef.current)  { try { map.removeControl(legendRef.current); } catch {} }
+        if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} }
+
+        p1LayerRef.current     = L.tileLayer(url1, { opacity: 0.85, zIndex: 5 });
+        p2LayerRef.current     = L.tileLayer(url2, { opacity: 0.85, zIndex: 6 });
+        changeLayerRef.current = L.tileLayer(urlC, { opacity: 0.85, zIndex: 7 });
+
+        // Add all three by default
+        [p1LayerRef.current, p2LayerRef.current, changeLayerRef.current].forEach(l => l.addTo(map));
+        overlayRef.current = changeLayerRef.current;
+
+        if (dC.bounds?.length) {
+          try { map.fitBounds(dC.bounds.map(([lng, lat]) => [lat, lng])); } catch {}
+        }
+
+        const dsLabel = DATASET_CONFIG[dataset]?.label || dataset;
+        layerControlRef.current = L.control.layers(
+          { "Street Map": map._baseStreet, "Satellite": map._baseSat },
+          {
+            [`🟦 ${dsLabel} ${index} P1 (${fromYear}–${toYear})`]: p1LayerRef.current,
+            [`🟩 ${dsLabel} ${index} P2 (${fromYear2}–${toYear2})`]: p2LayerRef.current,
+            [`🔴 Change Map`]: changeLayerRef.current,
+          },
+          { collapsed: false }
+        ).addTo(map);
+
+        // Change map legend
+        const vis = d1.vis_params || {};
+        const palette = (vis.palette || []).map(normalizeColor);
+        const Legend = L.Control.extend({
+          onAdd() {
+            const div = L.DomUtil.create("div");
+            div.style.cssText = "background:white;padding:8px 10px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border-radius:6px;font-family:sans-serif;min-width:160px";
+            const min = vis.min ?? -1; const max = vis.max ?? 1;
+            div.innerHTML = `<b style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${index} Change</b>
+              <div style="margin:6px 0 2px;font-size:10px;color:#666">P1 / P2 scale</div>
+              <div style="width:140px;height:10px;background:linear-gradient(to right,${palette.join(",")});border-radius:3px;margin:4px 0"></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:#666"><span>${min}</span><span>${max}</span></div>`;
+            return div;
+          }
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-        addOverlayAndLegend(data, dataset);
-        setMessage("Change detection layer loaded successfully.");
-      } catch (e) { setMessage(`Failed: ${e.message}`); }
+        legendRef.current = new Legend({ position: "bottomleft" });
+        legendRef.current.addTo(map);
+        map.invalidateSize();
+
+        setResultsData({
+          label: `${index} Change`,
+          datasetLabel: DATASET_CONFIG[dataset]?.label || dataset,
+          period: `${fromYear}–${toYear} vs ${fromYear2}–${toYear2}`,
+          isChange: true, isLandcover: false,
+          visParams: vis, uniqueClasses: null, metadata: null,
+        });
+        setResultsOpen(true);
+        setMessage(`Change detection loaded — 3 layers added. Use checkboxes top-right to toggle.`);
+      } catch (e) {
+        const msg = e.message || "";
+        const isAbort = e.name === "AbortError" || msg.includes("aborted");
+        if (isAbort) setMessage("Request timed out. Try a smaller area or shorter date range.");
+        else setMessage(`Change detection failed: ${msg}`);
+      }
       finally { setLoading(false); }
       return;
     }
@@ -620,6 +751,13 @@ export default function Maps() {
       if (!data.tiles && !data.mode_tiles) throw new Error(`No tiles for ${dataset} ${index}`);
       addOverlayAndLegend(data, dataset);
       setMessage("Layer loaded successfully.");
+      // Fetch metadata asynchronously — don't block tile display
+      const geomForMeta = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+      fetchMetadataAsync(dataset,
+        `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`,
+        `${toYear}-${toMonth || "12"}-${toDay || "31"}`,
+        geomForMeta
+      );
     } catch (e) {
       const msg = e.message || "";
       const isAbort = e.name === "AbortError" || msg.includes("aborted");
@@ -961,31 +1099,77 @@ export default function Maps() {
     } catch (e) { setMessage(`Change map failed: ${e.message}`); }
     finally { setChangeMapLoading(false); }
   };
-// ── Email gate — wraps any action behind email capture ──
-  
- const saveEmail = async (email, action) => {
+  // ── Auth + email tracking ──
+  const saveEmail = async (email, action) => {
     try {
       await fetch(`${BACKEND_URL}/capture_email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, action }),
       });
-    } catch (e) {
-      console.warn("Email save failed:", e);
-    }
+    } catch (e) { console.warn("Email save failed:", e); }
   };
 
-  const requireAuth = (actionLabel, actionFn) => requireEmail(actionLabel, actionFn);
+  // Listen to Firebase auth state changes
+  useEffect(() => {
+    if (!_fbAuth) return;
+    const unsub = onAuthStateChanged(_fbAuth, (u) => {
+      setUser(u || null);
+      if (u) {
+        const key = `hwasat_seen_${u.uid}`;
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, "1");
+          saveEmail(u.email, "google_signin");
+        }
+      }
+    });
+    return unsub;
+  }, []);
 
-  const requireEmail = (actionLabel, actionFn) => {
-    const stored = localStorage.getItem("hwasat_user_email");
-    if (stored) {
-      actionFn(); // already have email, proceed directly
+  // Require Google sign-in before running an action
+  const requireAuth = (actionLabel, actionFn) => {
+    if (user) {
+      saveEmail(user.email, actionLabel);
+      actionFn();
     } else {
-      setEmailPendingAction(() => actionFn);
-      setEmailModalOpen(true);
+      setAuthPendingAction(() => actionFn);
+      setAuthModalOpen(true);
     }
   };
+
+  // Alias so CSV export buttons still work
+  const requireEmail = requireAuth;
+
+  const handleGoogleSignIn = async () => {
+    if (!_fbAuth || !_fbProvider) { console.error("Firebase not available"); return; }
+    setAuthLoading(true);
+    try {
+      const result = await signInWithPopup(_fbAuth, _fbProvider);
+      const u = result.user;
+      setUser(u);
+      setAuthModalOpen(false);
+      saveEmail(u.email, "google_signin");
+      if (authPendingAction) { authPendingAction(); setAuthPendingAction(null); }
+    } catch (e) {
+      if (e.code !== "auth/popup-closed-by-user") console.error("Sign in failed:", e);
+    } finally { setAuthLoading(false); }
+  };
+
+  const handleSignOut = async () => {
+    if (_fbAuth) await signOut(_fbAuth);
+    setUser(null);
+  };
+
+  const handleEmailSubmit = async () => {
+    const email = emailInput.trim();
+    if (!email || !email.includes("@")) return;
+    localStorage.setItem("hwasat_user_email", email);
+    setEmailModalOpen(false);
+    await saveEmail(email, "email_capture");
+    if (emailPendingAction) { emailPendingAction(); setEmailPendingAction(null); }
+    setEmailInput("");
+  };
+
 
   const handleEmailSubmit = async () => {
     const email = emailInput.trim();
@@ -1241,7 +1425,7 @@ export default function Maps() {
 
           {/* ── Action Buttons ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button onClick={handleViewSelection} disabled={loading}
+            <button onClick={() => handleViewSelection()} disabled={loading}
               style={{ background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
               <Icon d={icons.eye} size={14} /> View Selection
             </button>
@@ -1255,10 +1439,19 @@ export default function Maps() {
                     📈 {tsLoading ? "Loading..." : "Time Series"}
                   </button>
                   <select value={tsInterval} onChange={e => setTsInterval(e.target.value)}
-                    style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer" }}>
+                    style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer", width: 110, flexShrink: 0 }}>
+                    {/* Always available */}
                     <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
                     <option value="seasonal">Seasonal</option>
+                    {/* MODIS NDVI/EVI only — 16-day composite matches MOD13Q1 product */}
+                    {dataset === "modis" && ["NDVI","EVI"].includes(index) && (
+                      <option value="16day">16-Day (MODIS composite)</option>
+                    )}
+                    {/* MODIS NDWI/NBR/NDMI/NDSI only — daily from MOD09GA */}
+                    {dataset === "modis" && ["NDWI","NBR","NDMI","NDSI"].includes(index) && (
+                      <option value="daily">Daily (max 1 year)</option>
+                    )}
                   </select>
                 </div>
                 {/* Seasonal month range picker */}
@@ -1354,10 +1547,21 @@ export default function Maps() {
               {svg}
             </button>
           ))}
-          {drawnLayerRef.current && (
+          {drawnLayerExists && (
             <button title="Clear drawn AOI" onClick={() => {
-              if (drawnLayerRef.current) { mapRef.current.removeLayer(drawnLayerRef.current); drawnLayerRef.current = null; }
-              setCustomGeoJSON(null); setUseCustomGeoJSON(false); setActiveTool(null);
+              if (drawnLayerRef.current) {
+                try { mapRef.current.removeLayer(drawnLayerRef.current); } catch {}
+                drawnLayerRef.current = null;
+              }
+              // Also remove from boundary cache
+              if (boundaryLayersCache.current.custom) {
+                try { mapRef.current.removeLayer(boundaryLayersCache.current.custom); } catch {}
+                delete boundaryLayersCache.current.custom;
+              }
+              setDrawnLayerExists(false);
+              setCustomGeoJSON(null);
+              setUseCustomGeoJSON(false);
+              setActiveTool(null);
             }} style={{
               width: 32, height: 32, borderRadius: 6, border: "2px solid rgba(0,0,0,0.25)",
               background: "white", color: "#888", cursor: "pointer",
@@ -1488,8 +1692,8 @@ export default function Maps() {
                     <div style={{ fontSize: 11, color: t.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, fontFamily: "sans-serif" }}>Dataset Info</div>
                     {[
                       { label: "Resolution", value: resultsData.metadata?.resolution || { sentinel2:"10m", landsat:"30m", modis:"250m", landcover:"10m", climate:"5.5km" }[resultsData.datasetLabel?.toLowerCase()] || "N/A" },
-                      { label: "Images Used", value: resultsData.metadata?.images_used != null ? resultsData.metadata.images_used : "N/A" },
-                      { label: "Data Coverage", value: resultsData.metadata?.coverage_pct != null ? `${resultsData.metadata.coverage_pct}%` : "N/A" },  
+                      { label: "Images Used", value: metadataLoading ? "Loading..." : resultsData.metadata?.images_used != null ? resultsData.metadata.images_used : "N/A" },
+                      { label: "Data Coverage", value: metadataLoading ? "Loading..." : resultsData.metadata?.coverage_pct != null ? `${resultsData.metadata.coverage_pct}%` : "N/A" },  
                       { label: "Date Range", value: resultsData.metadata ? `${resultsData.metadata.start} → ${resultsData.metadata.end}` : `${resultsData.period}` },
                     ].map(item => (
                       <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontFamily: "sans-serif" }}>
@@ -1808,52 +2012,80 @@ export default function Maps() {
           </div>
         )}
 
-        {/* ── Email Capture Modal ── */}
-        {emailModalOpen && (
+        {/* ── Google Sign-in Modal ── */}
+        {authModalOpen && (
           <div style={{
             position: "fixed", inset: 0, zIndex: 9999,
-            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
             display: "flex", alignItems: "center", justifyContent: "center",
-          }} onClick={(e) => { if (e.target === e.currentTarget) setEmailModalOpen(false); }}>
+          }} onClick={(e) => { if (e.target === e.currentTarget) { setAuthModalOpen(false); setAuthPendingAction(null); } }}>
             <div style={{
-              background: "white", borderRadius: 16, padding: "36px 32px",
-              width: 380, boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
-              fontFamily: "sans-serif", position: "relative",
+              background: "white", borderRadius: 20, padding: "40px 36px",
+              width: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.25)",
+              fontFamily: "sans-serif", position: "relative", textAlign: "center",
             }}>
-              <button onClick={() => setEmailModalOpen(false)} style={{
+              <button onClick={() => { setAuthModalOpen(false); setAuthPendingAction(null); }} style={{
                 position: "absolute", top: 14, right: 16, background: "none",
-                border: "none", fontSize: 20, cursor: "pointer", color: "#9ca3af",
+                border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af",
               }}>×</button>
-              <div style={{ textAlign: "center", marginBottom: 16 }}>
-                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#f0fdf4", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#111" }}>Almost there</div>
-                <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
-                  Enter your email to continue.<br/>We will never spam you.
-                </div>
+
+              {/* Logo mark */}
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#f0fdf4", margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
-              <input
-                type="email" placeholder="you@example.com"
-                value={emailInput} onChange={e => setEmailInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleEmailSubmit()}
-                autoFocus
-                style={{ width: "100%", padding: "11px 14px", fontSize: 14, border: "1.5px solid #e5e7eb", borderRadius: 9, outline: "none", boxSizing: "border-box", marginBottom: 12, fontFamily: "sans-serif" }}
-              />
-              <button onClick={handleEmailSubmit} disabled={!emailInput.includes("@")} style={{
-                width: "100%", padding: "12px", borderRadius: 9, border: "none",
-                background: emailInput.includes("@") ? "#22c55e" : "#e5e7eb",
-                color: emailInput.includes("@") ? "white" : "#9ca3af",
-                fontSize: 14, fontWeight: 700, cursor: emailInput.includes("@") ? "pointer" : "default",
+
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 8 }}>Sign in to continue</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 28, lineHeight: 1.6 }}>
+                Time series, statistics, downloads and exports<br/>require a free account.
+              </div>
+
+              {/* Google button */}
+              <button onClick={handleGoogleSignIn} disabled={authLoading} style={{
+                width: "100%", padding: "13px 16px", borderRadius: 10,
+                border: "1.5px solid #e5e7eb", background: authLoading ? "#f9fafb" : "white",
+                cursor: authLoading ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+                fontSize: 15, fontWeight: 600, color: "#374151",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)", transition: "all 0.15s",
               }}>
-                Continue →
+                {authLoading ? <span>Signing in...</span> : (<>
+                  <svg width="20" height="20" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </svg>
+                  Continue with Google
+                </>)}
               </button>
-              <div style={{ textAlign: "center", fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-                Free forever. No account needed.
+
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 16 }}>
+                Free forever · No credit card required
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── User avatar — shown when signed in ── */}
+        {user && (
+          <div style={{
+            position: "absolute", top: 10, right: 10, zIndex: 1000,
+            display: "flex", alignItems: "center", gap: 8,
+            background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",
+          }}>
+            {user.photoURL
+              ? <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+              : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.displayName?.[0] || "U"}</div>
+            }
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.displayName?.split(" ")[0] || user.email}
+            </span>
+            <button onClick={handleSignOut} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#9ca3af", padding: "2px 4px" }}>
+              Sign out
+            </button>
           </div>
         )}
 
