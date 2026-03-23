@@ -107,10 +107,10 @@ export default function Footer() {
           justifyContent: "space-between", alignItems: "center",
           gap: 12,
         }}>
-          <span style={{ fontSize: 12, color: "#edf0f5" }}>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>
             © 2025–{new Date().getFullYear()} Hwasat Geosense · Kassel, Germany · All rights reserved
           </span>
-          <span style={{ fontSize: 14, color: "#edf0f5" }}>
+          <span style={{ fontSize: 14, color: "#94a3b8" }}>
             Backed by Google for Startups · Powered by Google Earth Engine · ESA Copernicus · NASA
           </span>
         </div>
