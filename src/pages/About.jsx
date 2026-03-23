@@ -256,7 +256,7 @@ export default function About() {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 26, flexShrink: 0,
               }}>🎓</div>   
-              <div>
+			<div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
                   Mekelle University
                 </div>
@@ -266,15 +266,15 @@ export default function About() {
                   Tigray region and beyond.
                 </p>
 				<div style={{ marginTop: 16 }}>
-				<div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
-                  Google for Startups
-                </div>
-				<p style={{ fontSize: 14, color: "#64748b", fontFamily: "sans-serif", lineHeight: 1.7, margin: 0 }}>
-                  Hwasat Geosense is a recipient of the Google for Startups Cloud Program, 
-				  recognizing our work in satellite-based environmental monitoring.
-                </p>
-              </div>
-            </div>
+					<div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
+						Google for Startups
+					</div>
+					<p style={{ fontSize: 14, color: "#64748b", fontFamily: "sans-serif", lineHeight: 1.7, margin: 0 }}>
+					Hwasat Geosense is a recipient of the Google for Startups Cloud Program, 
+					recognizing our work in satellite-based environmental monitoring.
+					</p>
+				</div>
+			</div>
           </section>
         </FadeIn>
 
