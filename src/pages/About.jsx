@@ -265,13 +265,13 @@ export default function About() {
                   expertise in remote sensing and environmental monitoring across the
                   Tigray region and beyond.
                 </p>
-		<div style={{ marginTop: 16 }}>
-		  <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
+				<div style={{ marginTop: 16 }}>
+				<div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
                   Google for Startups
                 </div>
-		<p style={{ fontSize: 14, color: "#64748b", fontFamily: "sans-serif", lineHeight: 1.7, margin: 0 }}>
+				<p style={{ fontSize: 14, color: "#64748b", fontFamily: "sans-serif", lineHeight: 1.7, margin: 0 }}>
                   Hwasat Geosense is a recipient of the Google for Startups Cloud Program, 
-		  recognizing our work in satellite-based environmental monitoring.
+				  recognizing our work in satellite-based environmental monitoring.
                 </p>
               </div>
             </div>
