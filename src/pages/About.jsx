@@ -256,7 +256,7 @@ export default function About() {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 26, flexShrink: 0,
               }}>🎓</div>   
-			<div>
+			  <div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
                   Mekelle University
                 </div>
@@ -274,6 +274,7 @@ export default function About() {
 					recognizing our work in satellite-based environmental monitoring.
 					</p>
 				</div>
+			</div>
 			</div>
           </section>
         </FadeIn>
