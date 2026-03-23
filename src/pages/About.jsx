@@ -255,7 +255,7 @@ export default function About() {
                 background: "#fff", border: "1px solid #e2e8f0",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 26, flexShrink: 0,
-              }}>🎓</div>
+              }}>🎓</div>   
               <div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
                   Mekelle University
@@ -265,7 +265,8 @@ export default function About() {
                   expertise in remote sensing and environmental monitoring across the
                   Tigray region and beyond.
                 </p>
-		<div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
+		<div style={{ marginTop: 16 }}>
+		  <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>
                   Google for Startups
                 </div>
 		<p style={{ fontSize: 14, color: "#64748b", fontFamily: "sans-serif", lineHeight: 1.7, margin: 0 }}>
