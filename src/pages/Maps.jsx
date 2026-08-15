@@ -199,6 +199,8 @@ export default function Maps() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authPendingAction, setAuthPendingAction] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+  const [premiumGateReason, setPremiumGateReason] = useState("");
   const [useCustomGeoJSON, setUseCustomGeoJSON] = useState(false);
   const [customGeoJSON, setCustomGeoJSON] = useState(null);
   const fileInputRef = useRef(null);
@@ -1006,10 +1008,10 @@ export default function Maps() {
     const aoiCheck = checkAoiSize(geometry, dataset, "download");
     if (aoiCheck?.type === "block") return setMessage(aoiCheck.message);
     if (aoiCheck?.type === "warn") {
-      setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); requireAuth("download_geotiff", () => _doDownload()); } });
+      setAoiWarning({ message: aoiCheck.message, onProceed: () => { setAoiWarning(null); requireAuth("download_geotiff", () => _doDownload(), aoiAreaKm2); } });
       return;
     }
-    requireAuth("download_geotiff", () => _doDownload());
+    requireAuth("download_geotiff", () => _doDownload(), aoiAreaKm2);
   };
 
   const _doDownload = async () => {
@@ -1375,19 +1377,49 @@ export default function Maps() {
     return unsub;
   }, []);
 
-  // Require Google sign-in before running an action
-  const requireAuth = (actionLabel, actionFn) => {
-    if (user) {
-      saveEmail(user.email, actionLabel);
-      actionFn();
-    } else {
-      setAuthPendingAction(() => actionFn);
-      setAuthModalOpen(true);
+  // Query backend: has this email already used their free quota for this action?
+  const checkUsage = async (email, action, area_km2 = null) => {
+    try {
+      const body = { email, action };
+      if (area_km2 !== null) body.area_km2 = area_km2;
+      const res = await fetch(`${BACKEND_URL}/check_usage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return { allowed: true }; // fail open on HTTP error
+      return await res.json();               // { allowed, reason? }
+    } catch (e) {
+      console.warn("Usage check failed:", e);
+      return { allowed: true };              // fail open on network error
     }
   };
 
-  // Alias so CSV export buttons keep working
-  const requireEmail = requireAuth;
+  // Require Google sign-in before running an action, then check free-plan quota.
+  // area_km2 is only relevant for download_geotiff (50 km² cap).
+  const requireAuth = async (actionLabel, actionFn, area_km2 = null) => {
+    if (!user) {
+      setAuthPendingAction(() => actionFn);
+      setAuthModalOpen(true);
+      return;
+    }
+    // Check quota against Airtable before logging or running
+    const usage = await checkUsage(user.email, actionLabel, area_km2);
+    if (!usage.allowed) {
+      setPremiumGateReason(usage.reason || "This feature requires a paid plan.");
+      setPremiumGateOpen(true);
+      return;
+    }
+    // Quota OK — log action then run
+    saveEmail(user.email, actionLabel);
+    actionFn();
+  };
+
+  // Alias so CSV export buttons keep working (CSV exports are not quota-gated)
+  const requireEmail = (actionLabel, actionFn) => {
+    if (user) { saveEmail(user.email, actionLabel); actionFn(); }
+    else { setAuthPendingAction(() => actionFn); setAuthModalOpen(true); }
+  };
 
   const handleGoogleSignIn = async () => {
     if (!_fbAuth || !_fbProvider) { console.error("Firebase not available"); return; }
@@ -2729,6 +2761,57 @@ export default function Maps() {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Premium gate popup ── */}
+        {premiumGateOpen && (
+          <div
+            onClick={e => { if (e.target === e.currentTarget) setPremiumGateOpen(false); }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 9000,
+              background: "rgba(0,0,0,0.55)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 24, fontFamily: "sans-serif",
+            }}
+          >
+            <div style={{
+              background: "#fff", borderRadius: 16, padding: "36px 32px",
+              maxWidth: 400, width: "100%", textAlign: "center",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+            }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+              <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#0f172a", margin: "0 0 10px" }}>
+                Premium Feature
+              </h3>
+              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px", lineHeight: 1.6 }}>
+                {premiumGateReason}
+              </p>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                <a
+                  href="/about#contact"
+                  onClick={() => setPremiumGateOpen(false)}
+                  style={{
+                    padding: "10px 20px", borderRadius: 8,
+                    background: "#7c3aed", color: "#fff",
+                    fontWeight: 600, fontSize: 13, textDecoration: "none",
+                    display: "inline-block",
+                  }}
+                >
+                  Contact us →
+                </a>
+                <button
+                  onClick={() => setPremiumGateOpen(false)}
+                  style={{
+                    padding: "10px 20px", borderRadius: 8,
+                    border: "1px solid #e2e8f0", background: "#f8fafc",
+                    color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}
