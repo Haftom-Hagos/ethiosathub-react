@@ -9,6 +9,7 @@ import {
 } from "../services/aoiApi";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
+const OWNER_EMAIL = "haftomhagos21@gmail.com";
 
 // ── Geo helpers for sub-level district summary ────────────────────────────────
 const _getGeoBbox = (geometry) => {
@@ -374,6 +375,7 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
   };
 
   return (
+    <>
     <div
       style={{
         position: "fixed", inset: 0, zIndex: 2000,
@@ -558,6 +560,7 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
       </div>
     </div>
     {showContactPopup && <ContactPopup onClose={() => setShowContactPopup(false)} />}
+    </>
   );
 }
 
@@ -575,7 +578,8 @@ const ANALYSIS_MONTHS = [
 ];
 
 // ── Analysis Modal ─────────────────────────────────────────────────────────────
-function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex }) {
+function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex, user }) {
+  const isOwner = user?.email === OWNER_EMAIL;
   const curYear = new Date().getFullYear();
   const [dataset,       setDataset]       = useState(initialDataset || "sentinel2");
   const [index,         setIndex]         = useState(initialIndex   || "NDVI");
@@ -589,6 +593,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
   const [error,         setError]         = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [showContactPopup, setShowContactPopup] = useState(false);
+  const [showUpgradeHint,  setShowUpgradeHint]  = useState(false);
 
   const dsConfig     = ANALYSIS_DATASETS.find(d => d.v === dataset);
   const indexOptions = dsConfig?.indices || [];
@@ -677,6 +682,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
   const iSt = { padding: "7px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", fontSize: 13, fontFamily: "sans-serif", outline: "none", width: "100%" };
 
   return (
+    <>
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" }}
@@ -862,7 +868,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
 
             {/* Download Report button */}
             <button
-              onClick={handleDownloadReport}
+              onClick={() => { if (isOwner) { handleDownloadReport(); } else { setShowUpgradeHint(h => !h); } }}
               disabled={reportLoading}
               style={{
                 width: "100%", padding: "11px 14px",
@@ -875,6 +881,12 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
             >
               {reportLoading ? "⏳ Generating PDF…" : "📄 Download Report"}
             </button>
+            {showUpgradeHint && (
+              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#92400e", textAlign: "center" }}>
+                📄 PDF reports are available on paid plans.{" "}
+                <a href="/about#contact" style={{ color: "#b45309", fontWeight: 600 }}>Contact us to upgrade →</a>
+              </div>
+            )}
 
             <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "center" }}>
               Click <strong>View on Map</strong> for time series and full dashboard
@@ -884,6 +896,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
       </div>
     </div>
     {showContactPopup && <ContactPopup onClose={() => setShowContactPopup(false)} />}
+  </>
   );
 }
 
@@ -1262,6 +1275,7 @@ export default function MyAreas() {
       {analysisAoi && (
         <AnalysisModal
           aoi={analysisAoi}
+          user={user}
           onClose={() => { setAnalysisAoi(null); setPreloadDataset(null); setPreloadIndex(null); }}
           onViewOnMap={() => {
             handleOpenInDashboard(analysisAoi);
