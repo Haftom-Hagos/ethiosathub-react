@@ -72,7 +72,7 @@ export default function Data() {
             <h3 className="text-2xl font-semibold text-green-700 mb-2">GeoPackage Format</h3>
             <p className="text-gray-700">
               GeoPackage (GPKG) is an open, efficient format that combines vector and raster
-              data in a single file. Compatible with QGIS, ArcGIS, and GDAL — ideal for
+              data in a single file. Compatible with QGIS, ArcGIS, and GDAL. It is ideal for
               reliable and long-term data sharing.
             </p>
           </div>
@@ -80,7 +80,7 @@ export default function Data() {
             <h3 className="text-2xl font-semibold text-green-700 mb-2">GeoJSON Format</h3>
             <p className="text-gray-700">
               GeoJSON is a lightweight JSON-based format, perfect for web mapping and APIs.
-              It supports geometries, features, and collections — a great choice for
+              It supports geometries, features, and collections; a great choice for
               interactive and browser-based applications.
             </p>
           </div>

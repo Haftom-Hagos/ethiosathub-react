@@ -200,7 +200,7 @@ export default function Home() {
         </h2>
         <p style={{ fontSize: "1.1rem", color: "#475569", lineHeight: 1.8, maxWidth: 700, margin: "0 auto 56px", fontFamily: "sans-serif" }}>
           Hwasat removes the technical barrier between satellite data archives
-          and the people who need them most — enabling faster research,
+          and the people who need them most; enabling faster research,
           better decision-making, and deeper environmental insight.
         </p>
 
