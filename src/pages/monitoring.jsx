@@ -302,9 +302,63 @@ function StatRow({ label, value, unit, classify, onAnalyse }) {
   );
 }
 
+// ── Contact-developer popup ───────────────────────────────────────────────────
+function ContactPopup({ onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 3000,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: "#fff", borderRadius: 16, padding: "36px 32px",
+        maxWidth: 400, width: "100%", textAlign: "center",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif",
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+        <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#0f172a", margin: "0 0 10px" }}>
+          Premium Feature
+        </h3>
+        <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.7, margin: "0 0 24px" }}>
+          This service is available on paid plans.<br />
+          Contact the developer to get access.
+        </p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          <a
+            href="/about#contact"
+            onClick={onClose}
+            style={{
+              padding: "10px 22px", borderRadius: 8,
+              background: "#16a34a", color: "#fff",
+              fontWeight: 700, fontSize: 13, textDecoration: "none",
+            }}
+          >
+            Contact Developer →
+          </a>
+          <button
+            onClick={onClose}
+            style={{
+              padding: "10px 22px", borderRadius: 8,
+              border: "1px solid #e2e8f0", background: "#f8fafc",
+              color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Stats Modal ───────────────────────────────────────────────────────────────
-function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory, onClose, onAnalyseIndex }) {
+function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory, onClose, onAnalyseIndex, isOwner }) {
   const cat = STATS_CATEGORIES.find(c => c.id === (stats?.category || selectedCategory));
+  const [showContactPopup, setShowContactPopup] = useState(false);
 
   // ── Custom date range (default: first day of current month → today) ──
   const _now  = new Date();
@@ -384,7 +438,7 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
               {STATS_CATEGORIES.map(({ id, icon, label, desc, color, datasetLabel }) => (
                 <button
                   key={id}
-                  onClick={() => onPickCategory(id, dateFrom, dateTo)}
+                  onClick={() => isOwner ? onPickCategory(id, dateFrom, dateTo) : setShowContactPopup(true)}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "flex-start",
                     padding: "14px 14px", borderRadius: 12,
@@ -503,6 +557,7 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
         })()}
       </div>
     </div>
+    {showContactPopup && <ContactPopup onClose={() => setShowContactPopup(false)} />}
   );
 }
 
@@ -533,6 +588,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
   const [districtData,  setDistrictData]  = useState(null);
   const [error,         setError]         = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [showContactPopup, setShowContactPopup] = useState(false);
 
   const dsConfig     = ANALYSIS_DATASETS.find(d => d.v === dataset);
   const indexOptions = dsConfig?.indices || [];
@@ -672,12 +728,16 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-          <button onClick={handleRun} disabled={loading} style={{
-            flex: 1, padding: "11px 14px", background: loading ? "#a78bfa" : "#7c3aed", color: "#fff",
-            border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer", fontFamily: "sans-serif",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-          }}>
+          <button
+            onClick={() => isOwner ? handleRun() : setShowContactPopup(true)}
+            disabled={loading}
+            style={{
+              flex: 1, padding: "11px 14px", background: loading ? "#a78bfa" : "#7c3aed", color: "#fff",
+              border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer", fontFamily: "sans-serif",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}
+          >
             {loading ? "⏳ Computing…" : "📊 Load Analysis"}
           </button>
           <button onClick={onViewOnMap} style={{
@@ -823,6 +883,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
         )}
       </div>
     </div>
+    {showContactPopup && <ContactPopup onClose={() => setShowContactPopup(false)} />}
   );
 }
 
@@ -1193,6 +1254,7 @@ export default function MyAreas() {
           onPickCategory={handlePickCategory}
           onClose={handleCloseStats}
           onAnalyseIndex={handleAnalyseFromStats}
+          isOwner={user?.email === OWNER_EMAIL}
         />
       )}
 
