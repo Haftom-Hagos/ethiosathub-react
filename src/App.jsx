@@ -5,7 +5,7 @@ import LoadingScreen from './components/LoadingScreen';
 
 // Lazy-load pages (Maps is handled persistently inside Layout to preserve layers)
 const Home = lazy(() => import('./pages/Home'));
-const Monitoring = lazy(() => import('./pages/Monitoring'));
+const Monitoring = lazy(() => import('./pages/MyAreas'));
 const Data = lazy(() => import('./pages/Data'));
 const Gallery = lazy(() => import('./pages/Gallery'));
 const About = lazy(() => import('./pages/About'));
