@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
@@ -25,7 +26,82 @@ try {
 }
 
 
-const BACKEND_URL = "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://hwasat-backend-r5rykfbhxa-ew.a.run.app";
+
+// Format a date from separate year/month/day parts into a readable string.
+// Only appends month/day when they are actually selected.
+const fmtDate = (y, m, d) => {
+  if (!y) return "";
+  let s = y;
+  if (m) s += `-${m}`;
+  if (m && d) s += `-${d}`;
+  return s;
+};
+
+// ── Dataset processing-lag (days behind today that data is reliably available) ──
+const DATASET_LAG_DAYS = {
+  sentinel2: 5,   // GEE processes S2 within ~5 days
+  landsat:   16,  // Landsat 8/9 revisit is 16 days; use conservative lag
+  modis:     8,   // MOD13 8-day composites have ~1-week delay
+  landcover: 5,   // Dynamic World mirrors S2 cadence
+  climate:   45,  // CHIRPS final product lags ~6 weeks
+};
+
+// Returns the latest Date for which data is reliably available for a dataset.
+const getDatasetMaxDate = (dsKey) => {
+  const lag = DATASET_LAG_DAYS[dsKey] ?? 7;
+  const d = new Date();
+  d.setDate(d.getDate() - lag);
+  return d;
+};
+
+// Flat bounding-box [minLng, minLat, maxLng, maxLat] from any GeoJSON geometry.
+const getGeoBbox = (geometry) => {
+  const pts = [];
+  const collect = (c) => {
+    if (!Array.isArray(c)) return;
+    if (typeof c[0] === "number") pts.push(c);
+    else c.forEach(collect);
+  };
+  collect(geometry.coordinates);
+  const lngs = pts.map(p => p[0]);
+  const lats  = pts.map(p => p[1]);
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+};
+
+const bboxOverlap = (a, b) =>
+  !(a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1]);
+
+// ── Point-in-polygon helpers for district centroid filtering ──
+const pointInPolygon = (pt, ring) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+};
+
+const featureCentroid = (f) => {
+  const bbox = getGeoBbox(f.geometry);
+  return [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
+};
+
+const geomContainsCentroid = (geom, pt) => {
+  if (geom.type === "Polygon") return pointInPolygon(pt, geom.coordinates[0]);
+  if (geom.type === "MultiPolygon") return geom.coordinates.some(poly => pointInPolygon(pt, poly[0]));
+  return true;
+};
+
+// ── Legend date formatter (e.g. "Jun-2024") ──
+const fmtLegend = (y, m, d) => {
+  if (!y) return "";
+  if (!m) return String(y);
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const mName = monthNames[parseInt(m, 10) - 1] || m;
+  return `${mName}-${y}`;
+};
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 16, className = "" }) => (
@@ -49,7 +125,37 @@ const icons = {
   close:     "M18 6L6 18M6 6l12 12",
 };
 
+// ── East Africa country registry ─────────────────────────────────────────────
+const COUNTRY_BOUNDS = {
+  burundi:  [[-4.47, 28.99], [-2.31, 30.85]],
+  djibouti: [[10.93, 41.77], [12.71, 43.42]],
+  eritrea:  [[12.36, 36.44], [18.00, 43.13]],
+  ethiopia: [[ 3.40, 33.00], [14.89, 47.98]],
+  kenya:    [[-4.68, 33.91], [ 4.62, 41.90]],
+  rwanda:   [[-2.84, 28.86], [-1.05, 30.90]],
+  somalia:  [[-1.68, 40.99], [11.97, 51.42]],
+  s_sudan:  [[ 3.49, 23.44], [12.22, 35.30]],
+  sudan:    [[ 8.68, 21.83], [22.22, 38.61]],
+  tanzania: [[-11.75, 29.34], [-0.99, 40.44]],
+  uganda:   [[-1.48, 29.57], [ 4.22, 35.00]],
+};
+
+const COUNTRIES = [
+  { key: "burundi",   label: "Burundi",      maxLevel: 2 },
+  { key: "djibouti",  label: "Djibouti",     maxLevel: 2 },
+  { key: "eritrea",   label: "Eritrea",      maxLevel: 2 },
+  { key: "ethiopia",  label: "Ethiopia",     maxLevel: 3 },
+  { key: "kenya",     label: "Kenya",        maxLevel: 2 },
+  { key: "rwanda",    label: "Rwanda",       maxLevel: 3 },
+  { key: "somalia",   label: "Somalia",      maxLevel: 3 },
+  { key: "s_sudan",   label: "South Sudan",  maxLevel: 2 },
+  { key: "sudan",     label: "Sudan",        maxLevel: 2 },
+  { key: "tanzania",  label: "Tanzania",     maxLevel: 3 },
+  { key: "uganda",    label: "Uganda",       maxLevel: 3 },
+];
+
 export default function Maps() {
+  const location = useLocation();
   const mapRef = useRef(null);
   const boundaryLayersCache = useRef({});
   const layerFeatureMap = useRef(new Map());
@@ -76,6 +182,7 @@ export default function Maps() {
   const [geojsonData, setGeojsonData] = useState({ adm1: null, adm2: null, adm3: null });
   const [dataset, setDataset] = useState("");
   const [index, setIndex] = useState("");
+  const [country, setCountry] = useState("");
   const [adminLevel, setAdminLevel] = useState("");
   const [featureName, setFeatureName] = useState("");
   const [featureList, setFeatureList] = useState([]);
@@ -115,6 +222,34 @@ export default function Maps() {
 
   const [indexOptions, setIndexOptions] = useState([]);
   const [yearOptions, setYearOptions] = useState([]);
+
+  // ── Decision Dashboard state ──
+  const [baselineData, setBaselineData]       = useState(null);
+  const [baselineLoading, setBaselineLoading] = useState(false);
+  const [districtData, setDistrictData]       = useState(null);
+  const [districtLoading, setDistrictLoading] = useState(false);
+  const baselineLayerRef = useRef(null);
+  const dashboardBoundaryCacheRef = useRef({});
+
+  // ── PDF Report state ──
+  const [reportLoading, setReportLoading] = useState(false);
+
+  // ── AI Insights state ──
+  const [aiInsights, setAiInsights]       = useState(null);
+  const [aiLoading, setAiLoading]         = useState(false);
+  const [aiError, setAiError]             = useState(null);
+
+  // ── Share link state ──
+  const [shareLoading, setShareLoading]   = useState(false);
+  const [shareUrl, setShareUrl]           = useState(null);
+  const [shareCopied, setShareCopied]     = useState(false);
+
+  // ── Save AOI state ──
+  const [saveAoiModalOpen, setSaveAoiModalOpen] = useState(false);
+  const [saveAoiName, setSaveAoiName] = useState("");
+  const [saveAoiLoading, setSaveAoiLoading] = useState(false);
+  const [saveAoiError, setSaveAoiError] = useState(null);
+  const [saveAoiSuccess, setSaveAoiSuccess] = useState(false);
 
   // ── Time series & stats state ──
   const [tsInterval, setTsInterval] = useState("monthly");
@@ -236,8 +371,25 @@ export default function Maps() {
     return null;
   };
 
-  const getPropName = (lvl) => lvl === "adm1" ? "ADM1_EN" : lvl === "adm2" ? "ADM2_EN" : "ADM3_EN";
-  const normalizeColor = (c) => c?.startsWith("#") ? c : /^[0-9A-Fa-f]{6}$/.test(c) ? `#${c}` : c || "#ccc";
+  // Detect the name property from the actual GeoJSON — handles all country formats
+  const getPropName = (data, level) => {
+    if (!data?.features?.length) return null;
+    const props = data.features[0].properties;
+    const n = level.replace("adm", ""); // "1" "2" "3"
+    for (const c of [`adm${n}_name`, `ADM${n}_EN`, `adm${n}_en`, "opz1_en"]) {
+      if (props[c] !== undefined) return c;
+    }
+    return Object.keys(props)[0]; // last-resort fallback
+  };
+  const normalizeColor = (c) => {
+    if (!c || typeof c !== "string") return "#ccc";
+    const t = c.trim();
+    if (!t) return "#ccc";
+    if (t.startsWith("#")) return t;                       // already valid CSS
+    if (/^[0-9A-Fa-f]{6}$/.test(t)) return `#${t}`;      // 6-char hex → prepend #
+    if (/^[0-9A-Fa-f]{3}$/.test(t)) return `#${t}`;      // 3-char hex → prepend #
+    return t;                                              // CSS named colors, rgb() etc — pass through unchanged
+  };
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const monthOptions = Array.from({ length: 12 }, (_, i) => ({
     value: String(i + 1).padStart(2, "0"),
@@ -256,6 +408,37 @@ export default function Maps() {
     map._baseSat = sat;
     layerControlRef.current = L.control.layers({ "Street Map": street, "Satellite": sat }, {}, { collapsed: false }).addTo(map);
   }, []);
+
+  // ── Pre-load AOI from Monitoring (sessionStorage) ──
+  // Re-runs whenever the route becomes /maps — needed because Maps is always
+  // mounted (display:none/block) and never remounts on navigation.
+  useEffect(() => {
+    if (location.pathname !== "/maps") return;
+    try {
+      const raw = sessionStorage.getItem("hwasat_load_aoi");
+      if (!raw) return;
+      sessionStorage.removeItem("hwasat_load_aoi");
+      const payload = JSON.parse(raw);
+      if (!payload?.geometry) return;
+
+      // Wrap bare geometry in a GeoJSON Feature
+      const feature = {
+        type: "Feature",
+        geometry: payload.geometry,
+        properties: { name: payload.name || "Saved Area" },
+      };
+      setCustomGeoJSON(feature);
+      setUseCustomGeoJSON(true);
+
+      // If a layer was pre-selected, restore dataset + index
+      if (payload.layers && payload.layers.length > 0) {
+        const first = payload.layers[0];
+        setDataset(first.dataset);
+        setIndex(first.index);
+      }
+    } catch (_) {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Invalidate map size when sidebar or results panel toggles
   useEffect(() => {
@@ -403,16 +586,34 @@ export default function Maps() {
     map.getContainer().style.cursor = cursors[type] || "crosshair";
   };
 
-  // ── Load boundaries ──
+  // ── Country change — resets everything downstream ──
+  const handleCountryChange = (newCountry) => {
+    setCountry(newCountry);
+    setAdminLevel("");
+    setFeatureName("");
+    setFeatureList([]);
+    setGeojsonData({ adm1: null, adm2: null, adm3: null });
+    Object.values(boundaryLayersCache.current).forEach(l => {
+      try { mapRef.current?.removeLayer(l); } catch {}
+    });
+    boundaryLayersCache.current = {};
+    layerFeatureMap.current.clear();
+    featureMap.current.clear();
+    if (newCountry && COUNTRY_BOUNDS[newCountry] && mapRef.current) {
+      try { mapRef.current.fitBounds(COUNTRY_BOUNDS[newCountry]); } catch {}
+    }
+  };
+
+  // ── Load boundaries — lazy, per selected country + level ──
   useEffect(() => {
-    if (useCustomGeoJSON) return;
-    Promise.all([
-      fetch("/data/ethiopia_admin_level_1_gcs.geojson").then(r => r.json()),
-      fetch("/data/ethiopia_admin_level_2_gcs.geojson").then(r => r.json()),
-      fetch("/data/ethiopia_admin_level_3_gcs_simplified.geojson").then(r => r.json()),
-    ]).then(([adm1, adm2, adm3]) => setGeojsonData({ adm1, adm2, adm3 }))
+    if (useCustomGeoJSON || !country || !adminLevel) return;
+    if (geojsonData[adminLevel]) return; // already cached
+    const n = adminLevel.replace("adm", "");
+    fetch(`/data/${country}/${country}_level_${n}_gcs.geojson`)
+      .then(r => r.json())
+      .then(data => setGeojsonData(prev => ({ ...prev, [adminLevel]: data })))
       .catch(() => setMessage("Failed to load boundary data."));
-  }, [useCustomGeoJSON]);
+  }, [country, adminLevel, useCustomGeoJSON]);
 
   // ── File upload ──
   const handleFileUpload = (e) => {
@@ -439,13 +640,26 @@ export default function Maps() {
     if (!dataset) return;
     const cfg = DATASET_CONFIG[dataset];
     setIndexOptions(cfg.indices);
-    const [minY, maxY] = cfg.yearRange;
-    setYearOptions(Array.from({ length: maxY - minY + 1 }, (_, i) => maxY - i));
+    const [minY] = cfg.yearRange;
+    // Cap the max selectable year to the dataset's actual data availability
+    const maxAvailDate = getDatasetMaxDate(dataset);
+    const capY = maxAvailDate.getFullYear();
+    setYearOptions(Array.from({ length: capY - minY + 1 }, (_, i) => capY - i));
     setIndex("");
     // Reset special intervals if switching away from MODIS
     if (dataset !== "modis") {
       setTsInterval(prev => (prev === "daily" || prev === "16day") ? "monthly" : prev);
     }
+    // Clear stale chart/AI data but keep the panel open so the user sees it's empty
+    setResultsData(null);
+    setTsData(null);
+    setStatsData(null);
+    setAiInsights(null);
+    setAiError(null);
+    setBaselineData(null);
+    setDistrictData(null);
+    setShareUrl(null);
+    setActiveTab("info");
   }, [dataset]);
 
   // ── Admin level → boundaries ──
@@ -457,8 +671,8 @@ export default function Maps() {
     featureMap.current.clear();
     setFeatureList([]);
     setFeatureName("");
-    const prop = getPropName(adminLevel);
-    setFeatureList(geojsonData[adminLevel].features.map(f => f.properties[prop]).sort((a, b) => a.localeCompare(b)));
+    const prop = getPropName(geojsonData[adminLevel], adminLevel);
+    setFeatureList(geojsonData[adminLevel].features.map(f => f.properties[prop]).filter(Boolean).sort((a, b) => a.localeCompare(b)));
     const layer = L.geoJSON(geojsonData[adminLevel], {
       style: { color: "#3b82f6", weight: 1.2, fillOpacity: 0 },
       onEachFeature: (feature, lyr) => {
@@ -484,7 +698,10 @@ export default function Maps() {
     if (boundaryLayersCache.current.custom) map.removeLayer(boundaryLayersCache.current.custom);
     const layer = L.geoJSON(customGeoJSON, { style: { color: "#ef4444", weight: 2.5, fillOpacity: 0, dashArray: "6,3" } }).addTo(map);
     boundaryLayersCache.current.custom = layer;
-    map.fitBounds(layer.getBounds());
+    // Delay fitBounds so Leaflet can recalculate size after display:none → block
+    setTimeout(() => {
+      try { map.invalidateSize(); map.fitBounds(layer.getBounds()); } catch {}
+    }, 150);
   }, [customGeoJSON, useCustomGeoJSON]);
 
   // ── Feature highlight ──
@@ -590,17 +807,25 @@ export default function Maps() {
 
     // ── Open results panel ──
     const period = changeMode
-      ? `${fromYear}–${toYear} vs ${fromYear2}–${toYear2}`
-      : `${fromYear}–${toYear}`;
+      ? `${fmtLegend(fromYear, fromMonth, fromDay)} – ${fmtLegend(toYear, toMonth, toDay)} vs ${fmtLegend(fromYear2, fromMonth2, fromDay2)} – ${fmtLegend(toYear2, toMonth2, toDay2)}`
+      : `${fmtLegend(fromYear, fromMonth, fromDay)} – ${fmtLegend(toYear, toMonth, toDay)}`;
+    // Clear stale dashboard data whenever a new layer is loaded
+    setBaselineData(null);
+    setDistrictData(null);
+    setAiInsights(null);
+    setAiError(null);
+    setShareUrl(null);
     setResultsData({
       label: data.legend?.label || index,
       datasetLabel: DATASET_CONFIG[datasetKey]?.label || datasetKey,
       period,
       isChange: changeMode,
-      visParams: data.vis_params || {},
+      visParams: { ...(data.vis_params || {}), palette: palette.length > 0 ? palette : ((data.vis_params?.palette || []).map(normalizeColor)) },
       uniqueClasses: data.unique_classes || null,
       isLandcover: datasetKey === "landcover",
       metadata: data.metadata || null,
+      legendMin: min,
+      legendMax: max,
     });
     setResultsOpen(true);
   };
@@ -692,8 +917,8 @@ export default function Maps() {
         layerControlRef.current = L.control.layers(
           { "Street Map": map._baseStreet, "Satellite": map._baseSat },
           {
-            [`🟦 ${dsLabel} ${index} P1 (${fromYear}–${toYear})`]: p1LayerRef.current,
-            [`🟩 ${dsLabel} ${index} P2 (${fromYear2}–${toYear2})`]: p2LayerRef.current,
+            [`🟦 ${dsLabel} ${index} P1 (${fmtLegend(fromYear, fromMonth, fromDay)}–${fmtLegend(toYear, toMonth, toDay)})`]: p1LayerRef.current,
+            [`🟩 ${dsLabel} ${index} P2 (${fmtLegend(fromYear2, fromMonth2, fromDay2)}–${fmtLegend(toYear2, toMonth2, toDay2)})`]: p2LayerRef.current,
             [`🔴 Change Map`]: changeLayerRef.current,
           },
           { collapsed: false }
@@ -721,9 +946,12 @@ export default function Maps() {
         setResultsData({
           label: `${index} Change`,
           datasetLabel: DATASET_CONFIG[dataset]?.label || dataset,
-          period: `${fromYear}–${toYear} vs ${fromYear2}–${toYear2}`,
+          period: `${fmtLegend(fromYear, fromMonth, fromDay)} – ${fmtLegend(toYear, toMonth, toDay)} vs ${fmtLegend(fromYear2, fromMonth2, fromDay2)} – ${fmtLegend(toYear2, toMonth2, toDay2)}`,
           isChange: true, isLandcover: false,
-          visParams: vis, uniqueClasses: null, metadata: null,
+          visParams: { ...vis, palette: (vis.palette || []).map(normalizeColor) },
+          legendMin: vis.min ?? -1,
+          legendMax: vis.max ?? 1,
+          uniqueClasses: null, metadata: null,
         });
         setResultsOpen(true);
         setMessage(`Change detection loaded — 3 layers added. Use checkboxes top-right to toggle.`);
@@ -863,6 +1091,12 @@ export default function Maps() {
     if (fileInputRef.current) fileInputRef.current.value = "";
     setResultsOpen(false);
     setResultsData(null);
+    setBaselineData(null);
+    setDistrictData(null);
+    setAiInsights(null);
+    setAiError(null);
+    setShareUrl(null);
+    if (baselineLayerRef.current) { try { map.removeLayer(baselineLayerRef.current); } catch {} baselineLayerRef.current = null; }
     map.setView([9.145, 40.4897], 6);
   };
 
@@ -877,25 +1111,40 @@ export default function Maps() {
   const sectionTitleStyle = { fontSize: 11, fontWeight: 700, color: t.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 };
 
   // ── Date row component ──
-  const DateRow = ({ label, y, m, d, setY, setM, setD, color }) => (
-    <div style={{ marginBottom: 8 }}>
-      <span style={{ ...labelStyle, color: color || t.muted }}>{label}</span>
-      <div style={{ display: "flex", gap: 6 }}>
-        <select value={y} onChange={e => setY(e.target.value)} style={{ ...inputStyle, flex: 2 }}>
-          <option value="">Year</option>
-          {yearOptions.map(yr => <option key={yr} value={yr}>{yr}</option>)}
-        </select>
-        <select value={m} onChange={e => setM(e.target.value)} style={{ ...inputStyle, flex: 2 }}>
-          <option value="">Month</option>
-          {monthOptions.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
-        </select>
-        <select value={d} onChange={e => setD(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-          <option value="">Day</option>
-          {dayOptionsFor(y, m).map(dd => <option key={dd} value={dd}>{dd}</option>)}
-        </select>
+  const DateRow = ({ label, y, m, d, setY, setM, setD, color, maxDate }) => {
+    // Derive per-selector caps from maxDate
+    const maxY  = maxDate ? maxDate.getFullYear() : null;
+    const maxMo = (maxY && y && parseInt(y, 10) === maxY)
+      ? String(maxDate.getMonth() + 1).padStart(2, "0")
+      : null;
+    const maxDy = (maxMo && m === maxMo)
+      ? String(maxDate.getDate()).padStart(2, "0")
+      : null;
+
+    const filtYears  = maxY  ? yearOptions.filter(yr => yr <= maxY)          : yearOptions;
+    const filtMonths = maxMo ? monthOptions.filter(mo => mo.value <= maxMo)  : monthOptions;
+    const filtDays   = maxDy ? dayOptionsFor(y, m).filter(dd => dd <= maxDy) : dayOptionsFor(y, m);
+
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ ...labelStyle, color: color || t.muted }}>{label}</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select value={y} onChange={e => setY(e.target.value)} style={{ ...inputStyle, flex: 4 }}>
+            <option value="">Year</option>
+            {filtYears.map(yr => <option key={yr} value={yr}>{yr}</option>)}
+          </select>
+          <select value={m} onChange={e => setM(e.target.value)} style={{ ...inputStyle, flex: 5 }}>
+            <option value="">Month</option>
+            {filtMonths.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
+          </select>
+          <select value={d} onChange={e => setD(e.target.value)} style={{ ...inputStyle, flex: 3 }}>
+            <option value="">Day</option>
+            {filtDays.map(dd => <option key={dd} value={dd}>{dd}</option>)}
+          </select>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
 
   // ── Time Series ──
@@ -1039,8 +1288,8 @@ export default function Maps() {
       if (legendRef.current)  { try { map.removeControl(legendRef.current); } catch {} }
       if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} }
 
-      const p1Label = `🟦 Land Cover P1 (${fromYear}–${toYear})`;
-      const p2Label = `🟩 Land Cover P2 (${fromYear2}–${toYear2})`;
+      const p1Label = `🟦 Land Cover P1 (${fmtLegend(fromYear, fromMonth, fromDay)}–${fmtLegend(toYear, toMonth, toDay)})`;
+      const p2Label = `🟩 Land Cover P2 (${fmtLegend(fromYear2, fromMonth2, fromDay2)}–${fmtLegend(toYear2, toMonth2, toDay2)})`;
       const chLabel = `🔴 Stable vs Changed`;
 
       p1LayerRef.current    = L.tileLayer(url1, { opacity: 0.85, zIndex: 5 });
@@ -1091,9 +1340,9 @@ export default function Maps() {
       setResultsData({
         label: "Land Cover Change",
         datasetLabel: "Dynamic World",
-        period: `${fromYear}–${toYear} vs ${fromYear2}–${toYear2}`,
+        period: `${fmtLegend(fromYear, fromMonth, fromDay)} – ${fmtLegend(toYear, toMonth, toDay)} vs ${fmtLegend(fromYear2, fromMonth2, fromDay2)} – ${fmtLegend(toYear2, toMonth2, toDay2)}`,
         isChange: true, isLandcover: true,
-        visParams: dChange.vis_params || {},
+        visParams: { ...(dChange.vis_params || {}), palette: ((dChange.vis_params?.palette || []).map(normalizeColor)) },
         uniqueClasses: null, metadata: null,
       });
     } catch (e) { setMessage(`Change map failed: ${e.message}`); }
@@ -1187,6 +1436,314 @@ export default function Maps() {
     });
   };
 
+  // ── Decision Dashboard ──
+  const handleLoadDashboard = async () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry || !dataset || !index || !fromYear || !toYear) return;
+    const startDate = `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`;
+    const endDate   = `${toYear}-${toMonth || "12"}-${toDay || "28"}`;
+    const body = { dataset, index, startDate, endDate, geometry };
+
+    // ── Resolve which East Africa country this AOI belongs to ────────────────
+    // For dropdown selections the country is already known.
+    // For custom-drawn / uploaded AOIs, detect it from the centroid vs COUNTRY_BOUNDS.
+    let eaCountry = null;
+    if (!useCustomGeoJSON && country) {
+      eaCountry = COUNTRIES.find(c => c.key === country) || null;
+    } else {
+      // Detect by centroid overlap with each country's bounding box
+      try {
+        const [minLng, minLat, maxLng, maxLat] = getGeoBbox(geometry);
+        const cLng = (minLng + maxLng) / 2;
+        const cLat = (minLat + maxLat) / 2;
+        for (const c of COUNTRIES) {
+          const bounds = COUNTRY_BOUNDS[c.key];
+          if (!bounds) continue;
+          const [[bMinLat, bMinLng], [bMaxLat, bMaxLng]] = bounds;
+          if (cLng >= bMinLng && cLng <= bMaxLng && cLat >= bMinLat && cLat <= bMaxLat) {
+            eaCountry = c;
+            break;
+          }
+        }
+      } catch { /* geometry unusable — eaCountry stays null */ }
+    }
+
+    // ── Fetch and attach the website's boundary GeoJSON ──────────────────────
+    if (eaCountry) {
+      const bestLevel  = eaCountry.maxLevel; // finest available level (2 or 3)
+      const countryKey = eaCountry.key;
+
+      let features = [];
+
+      if (!useCustomGeoJSON && featureName && adminLevel) {
+        const selectedLevel = parseInt(adminLevel.replace("adm", ""), 10);
+        const reportLevel = selectedLevel + 1;
+
+        if (reportLevel > bestLevel || selectedLevel >= bestLevel) {
+          // Already at finest level — send the selected feature as single unit
+          features = selectedFeatureGeoJSON
+            ? [{ type: "Feature", geometry: selectedFeatureGeoJSON.geometry || selectedFeatureGeoJSON, properties: { name: featureName } }]
+            : [];
+          body.districtLevel = selectedLevel;
+        } else {
+          // Load one level finer than what the user selected
+          const reportLevelKey = `adm${reportLevel}`;
+          let reportData = geojsonData[reportLevelKey] || dashboardBoundaryCacheRef.current[reportLevelKey];
+          if (!reportData) {
+            try {
+              const resp = await fetch(`/data/${countryKey}/${countryKey}_level_${reportLevel}_gcs.geojson`);
+              if (resp.ok) {
+                reportData = await resp.json();
+                // Cache in ref only — avoids triggering admin-level useEffect (which zooms map)
+                dashboardBoundaryCacheRef.current[reportLevelKey] = reportData;
+              }
+            } catch (e) { console.warn("Could not load report boundary data:", e); }
+          }
+          if (reportData?.features?.length) {
+            const parentKeys = [`adm${selectedLevel}_name`, `ADM${selectedLevel}_EN`, `ADM${selectedLevel}_NAME`];
+            const needle = featureName.toLowerCase().trim();
+            let filtered = reportData.features.filter(feat => {
+              const p = feat.properties || {};
+              return parentKeys.some(k => typeof p[k] === "string" && p[k].toLowerCase().trim() === needle);
+            });
+            // Additional centroid-in-polygon check to exclude edge features from neighbouring zones
+            if (geometry && filtered.length > 0) {
+              const selectedGeom = geometry;
+              const withCentroid = filtered.filter(feat => {
+                try { return geomContainsCentroid(selectedGeom, featureCentroid(feat)); }
+                catch { return true; }
+              });
+              // Fallback: if centroid check removes everything, use name-match only
+              filtered = withCentroid.length > 0 ? withCentroid : filtered;
+            }
+            features = filtered;
+          }
+          body.districtLevel = reportLevel;
+        }
+      } else {
+        // Custom-drawn AOI → single polygon mean (backend returns one value for the whole area)
+        features = [{ type: "Feature", geometry, properties: { name: "Selected Area" } }];
+        body.districtLevel = 1;
+      }
+
+      if (features.length > 0) {
+        body.customDistricts = { type: "FeatureCollection", features };
+      }
+    }
+
+    // Load baseline + districts in parallel
+    setBaselineLoading(true);
+    setDistrictLoading(true);
+    setBaselineData(null);
+    setDistrictData(null);
+
+    Promise.all([
+      fetch(`${BACKEND_URL}/baseline`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).then(r => r.json()).catch(() => null),
+
+      fetch(`${BACKEND_URL}/district_summary`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).then(r => r.json()).catch(() => null),
+    ]).then(([baseline, districts]) => {
+      setBaselineData(baseline);
+      setDistrictData(Array.isArray(districts) ? districts : null);
+      setBaselineLoading(false);
+      setDistrictLoading(false);
+    });
+  };
+
+  // Add baseline tile layer to the map for visual comparison
+  const handleAddBaselineLayer = async () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry || !dataset || !index || !fromYear) return;
+
+    const currentYear = parseInt(fromYear, 10);
+    const baselineEndYear   = currentYear - 1;
+    const baselineStartYear = baselineEndYear - 4;
+    const startDate = `${baselineStartYear}-${fromMonth || "01"}-${fromDay || "01"}`;
+    const endDate   = `${baselineEndYear}-${toMonth || "12"}-${toDay || "28"}`;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/gee_layers`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataset, index, startDate, endDate, geometry }),
+      });
+      if (!res.ok) throw new Error("Failed to fetch baseline layer");
+      const data = await res.json();
+      const map = mapRef.current;
+      if (!map || !data.tiles) return;
+
+      // Remove old baseline layer
+      if (baselineLayerRef.current) map.removeLayer(baselineLayerRef.current);
+
+      const layer = L.tileLayer(data.tiles, { opacity: 0.7, attribution: "Baseline (5-yr mean)" });
+      layer.addTo(map);
+      baselineLayerRef.current = layer;
+
+      // Add to layer control if present
+      if (layerControlRef.current) {
+        layerControlRef.current.addOverlay(layer, `📅 Baseline ${startDate.slice(0,4)}–${endDate.slice(0,4)}`);
+      }
+      setMessage(`Baseline layer added (${baselineStartYear}–${baselineEndYear} ${index})`);
+    } catch (e) {
+      setMessage("Could not load baseline layer: " + e.message);
+    }
+  };
+
+  // ── Download PDF Report ──
+  const handleDownloadReport = async (template) => {
+    if (!baselineData) return;
+    setReportLoading(true);
+    try {
+      const startDate = `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`;
+      const endDate   = `${toYear}-${toMonth || "12"}-${toDay || "28"}`;
+      const res = await fetch(`${BACKEND_URL}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area_name:  featureName || "Selected Area",
+          dataset,
+          index,
+          start_date: startDate,
+          end_date:   endDate,
+          baseline:   baselineData,
+          districts:  districtData || [],
+          template,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `hwasat_${(featureName || "report").replace(/\s+/g, "_")}_${index}_${startDate}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setMessage(`Report generation failed: ${e.message}`);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // ── AI Plain-Language Insights ──
+  const handleAiInsights = async () => {
+    if (!baselineData || !user) {
+      setAiError("Sign in and load the dashboard first.");
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    setAiInsights(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${BACKEND_URL}/ai_insights`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          area_name: featureName || "Selected Area",
+          index, dataset,
+          baseline:  baselineData,
+          districts: districtData || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setAiInsights(data);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // ── Shareable Dashboard Link ──
+  const handleCreateShare = async () => {
+    if (!baselineData || !user) return;
+    setShareLoading(true);
+    setShareUrl(null);
+    setShareCopied(false);
+    try {
+      const token = await user.getIdToken();
+      const startDate = `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`;
+      const endDate   = `${toYear}-${toMonth || "12"}-${toDay || "28"}`;
+      const res = await fetch(`${BACKEND_URL}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          area_name:  featureName || "Selected Area",
+          dataset, index,
+          start_date: startDate,
+          end_date:   endDate,
+          baseline:   baselineData,
+          districts:  districtData || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setShareUrl(data.url);
+    } catch (e) {
+      setMessage(`Share failed: ${e.message}`);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleCopyShareUrl = () => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    });
+  };
+
+
+
+  // ── Save AOI ──
+  const handleSaveAoi = () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry) return setMessage("Select or draw an area first");
+    // Pre-fill name from current feature name or fallback
+    const defaultName = featureName || (useCustomGeoJSON ? "Custom Area" : "My Area");
+    setSaveAoiName(defaultName);
+    setSaveAoiError(null);
+    setSaveAoiSuccess(false);
+    if (!user) {
+      setAuthPendingAction(() => () => setSaveAoiModalOpen(true));
+      setAuthModalOpen(true);
+    } else {
+      setSaveAoiModalOpen(true);
+    }
+  };
+
+  const _doSaveAoi = async () => {
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry || !saveAoiName.trim()) return;
+    setSaveAoiLoading(true);
+    setSaveAoiError(null);
+    try {
+      const { saveAoi: _saveAoi } = await import("../services/aoiApi");
+      await _saveAoi(user, {
+        name: saveAoiName.trim(),
+        geometry,
+      });
+      setSaveAoiSuccess(true);
+      setTimeout(() => setSaveAoiModalOpen(false), 1800);
+    } catch (e) {
+      setSaveAoiError(e.message || "Failed to save area");
+    } finally {
+      setSaveAoiLoading(false);
+    }
+  };
+
   // ── Export CSV: Land Cover Stats ──
   const exportStatsCSV = () => {
     requireEmail("export_stats_csv", () => {
@@ -1257,16 +1814,36 @@ export default function Maps() {
             </div>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {["Ethiopia Levels", "Upload GeoJSON"].map((label, i) => (
-                <button key={i} onClick={() => { i === 0 ? (setUseCustomGeoJSON(false), setCustomGeoJSON(null)) : setUseCustomGeoJSON(true); }}
-                  style={{ flex: 1, padding: "6px 4px", fontSize: 11, borderRadius: 6, cursor: "pointer", fontFamily: "sans-serif", fontWeight: 600,
-                    background: (i === 0 ? !useCustomGeoJSON : useCustomGeoJSON) ? t.accent : t.card,
-                    color: (i === 0 ? !useCustomGeoJSON : useCustomGeoJSON) ? "#fff" : t.muted,
-                    border: `1px solid ${(i === 0 ? !useCustomGeoJSON : useCustomGeoJSON) ? t.accent : t.border}`,
-                  }}>
-                  {label}
-                </button>
-              ))}
+              {/* Country select — styled as a tab button */}
+              <select
+                value={country}
+                onChange={e => { setUseCustomGeoJSON(false); handleCountryChange(e.target.value); }}
+                style={{
+                  flex: 1, padding: "6px 4px", fontSize: 11, borderRadius: 6,
+                  cursor: "pointer", fontFamily: "sans-serif", fontWeight: 600,
+                  background: t.card,
+                  color: t.muted,
+                  border: `1px solid ${t.border}`,
+                  appearance: "none", WebkitAppearance: "none",
+                }}
+              >
+                <option value="">Select Country</option>
+                {COUNTRIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+
+              {/* Upload GeoJSON button */}
+              <button
+                onClick={() => { setUseCustomGeoJSON(true); setCustomGeoJSON(null); }}
+                style={{
+                  flex: 1, padding: "6px 4px", fontSize: 11, borderRadius: 6,
+                  cursor: "pointer", fontFamily: "sans-serif", fontWeight: 600,
+                  background: t.card,
+                  color: t.muted,
+                  border: `1px solid ${useCustomGeoJSON ? t.accent : t.border}`,
+                }}
+              >
+                Upload GeoJSON
+              </button>
             </div>
 
             {useCustomGeoJSON ? (
@@ -1279,21 +1856,29 @@ export default function Maps() {
               </div>
             ) : (
               <>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={labelStyle}>Admin Level</span>
-                  <select value={adminLevel} onChange={e => setAdminLevel(e.target.value)} style={inputStyle}>
-                    <option value="">Select level</option>
-                    <option value="adm1">Level 1 — Regions</option>
-                    <option value="adm2">Level 2 — Zones</option>
-                    <option value="adm3">Level 3 — Districts</option>
-                  </select>
-                </div>
-                <div>
-                  <span style={labelStyle}>Feature</span>
-                  <select value={featureName} onChange={e => setFeatureName(e.target.value)} style={inputStyle}>
-                    <option value="">Select feature</option>
-                    {featureList.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
+                {/* Admin Level + Feature — side by side */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    {/* <span style={labelStyle}>Admin Level</span>*/}
+                    <select value={adminLevel} onChange={e => setAdminLevel(e.target.value)} style={inputStyle} disabled={!country}>
+                      <option value="">Admin Level</option>
+                      {country && (() => {
+                        const cfg = COUNTRIES.find(c => c.key === country);
+                        return [
+                          cfg?.maxLevel >= 1 && <option key="adm1" value="adm1">Level 1</option>,
+                          cfg?.maxLevel >= 2 && <option key="adm2" value="adm2">Level 2</option>,
+                          cfg?.maxLevel >= 3 && <option key="adm3" value="adm3">Level 3</option>,
+                        ];
+                      })()}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    {/*<span style={labelStyle}>Feature</span>*/}
+                    <select value={featureName} onChange={e => setFeatureName(e.target.value)} style={inputStyle} disabled={!adminLevel || !featureList.length}>
+                      <option value="">Select area</option>
+                      {featureList.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
                 </div>
               </>
             )}
@@ -1346,21 +1931,24 @@ export default function Maps() {
               <Icon d={icons.layers} size={13} />
               Dataset & Index
             </div>
-            <div style={{ marginBottom: 8 }}>
-              <span style={labelStyle}>Dataset</span>
-              <select value={dataset} onChange={e => setDataset(e.target.value)} style={inputStyle}>
-                <option value="">Select dataset</option>
-                {Object.entries(DATASET_CONFIG).map(([k, v]) => (
-                  <option key={k} value={k}>{v.icon} {v.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <span style={labelStyle}>Index / Variable</span>
-              <select value={index} onChange={e => setIndex(e.target.value)} style={inputStyle} disabled={!dataset}>
-                <option value="">Select variable</option>
-                {indexOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
-              </select>
+            {/* Dataset + Index — side by side */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                {/*<span style={labelStyle}>Dataset</span>*/}
+                <select value={dataset} onChange={e => setDataset(e.target.value)} style={inputStyle}>
+                  <option value="">Dataset</option>
+                  {Object.entries(DATASET_CONFIG).map(([k, v]) => (
+                    <option key={k} value={k}>{v.icon} {v.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                {/*<span style={labelStyle}>Index</span>*/}
+                <select value={index} onChange={e => setIndex(e.target.value)} style={inputStyle} disabled={!dataset}>
+                  <option value="">Index</option>
+                  {indexOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1390,74 +1978,39 @@ export default function Maps() {
               <Icon d={icons.calendar} size={13} />
               {changeMode ? "Period 1" : "Date Range"}
             </div>
-            <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} />
-            <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} />
+            <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+            <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
           </div>
 
           {/* ── Period 2 (change detection) ── */}
           {changeMode && (
-            <div style={{ ...sectionStyle, borderLeft: "3px solid #ea580c", paddingLeft: 12 }}>
+            <div style={sectionStyle}>
               <div style={{ ...sectionTitleStyle, color: "#ea580c" }}>
-                <Icon d={icons.compare} size={13} />
+                <Icon d={icons.calendar} size={13} />
                 Period 2
               </div>
-              <div style={{ background: darkMode ? "rgba(234,88,12,0.08)" : "#fff7ed", border: "1px solid #fed7aa", borderRadius: 6, padding: "6px 10px", marginBottom: 10, fontSize: 11, color: "#9a3412", fontFamily: "sans-serif" }}>
-                📊 Result = <b>Period 2 − Period 1</b><br />
-                🟢 Green = increase · ⚪ White = no change · 🔴 Red = decrease
-              </div>
-              <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" />
-              <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" />
+              <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+              <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
             </div>
           )}
 
           {/* ── Action Buttons ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button onClick={() => handleViewSelection()} disabled={loading}
-              style={{ background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
-              <Icon d={icons.eye} size={14} /> View Selection
-            </button>
 
-            {/* Time series — only for non-landcover in single date mode */}
-            {dataset !== "landcover" && !changeMode && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={handleTimeSeries} disabled={tsLoading || loading}
-                    style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 12, fontWeight: 600, cursor: (tsLoading || loading) ? "not-allowed" : "pointer", opacity: (tsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
-                    📈 {tsLoading ? "Loading..." : "Time Series"}
-                  </button>
-                  <select value={tsInterval} onChange={e => setTsInterval(e.target.value)}
-                    style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer", width: 110, flexShrink: 0 }}>
-                    {/* Always available */}
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                    <option value="seasonal">Seasonal</option>
-                    {/* MODIS NDVI/EVI only — 16-day composite matches MOD13Q1 product */}
-                    {dataset === "modis" && ["NDVI","EVI"].includes(index) && (
-                      <option value="16day">16-Day (MODIS composite)</option>
-                    )}
-                    {/* MODIS NDWI/NBR/NDMI/NDSI only — daily from MOD09GA */}
-                    {dataset === "modis" && ["NDWI","NBR","NDMI","NDSI"].includes(index) && (
-                      <option value="daily">Daily (max 1 year)</option>
-                    )}
-                  </select>
-                </div>
-                {/* Seasonal month range picker */}
-                {tsInterval === "seasonal" && (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: t.muted, fontFamily: "sans-serif", whiteSpace: "nowrap" }}>Season:</span>
-                    <select value={seasonStart} onChange={e => setSeasonStart(e.target.value)}
-                      style={{ ...{background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, padding: "5px 6px", borderRadius: 6, fontSize: 11, fontFamily: "sans-serif"}, flex: 1 }}>
-                      {monthOptions.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
-                    </select>
-                    <span style={{ fontSize: 11, color: t.muted, fontFamily: "sans-serif" }}>→</span>
-                    <select value={seasonEnd} onChange={e => setSeasonEnd(e.target.value)}
-                      style={{ ...{background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, padding: "5px 6px", borderRadius: 6, fontSize: 11, fontFamily: "sans-serif"}, flex: 1 }}>
-                      {monthOptions.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Visualize + Download — side by side */}
+            {/* Visualize hidden for land cover + change detection (use the dedicated Change Map / Stats buttons instead) */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {!(dataset === "landcover" && changeMode) && (
+                <button onClick={() => handleViewSelection()} disabled={loading}
+                  style={{ flex: 1, background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                  <Icon d={icons.eye} size={14} /> {dataset === "landcover" ? "View Map" : "Visualize"}
+                </button>
+              )}
+              <button onClick={handleDownloadClick} disabled={loading}
+                style={{ flex: dataset === "landcover" && changeMode ? "1 1 100%" : 1, background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                <Icon d={icons.download} size={14} /> Download
+              </button>
+            </div>
 
             {/* Land cover buttons — only in change detection mode with landcover */}
             {dataset === "landcover" && changeMode && (
@@ -1472,15 +2025,21 @@ export default function Maps() {
                 </button>
               </div>
             )}
-
-            <button onClick={handleDownloadClick} disabled={loading}
-              style={{ background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
-              <Icon d={icons.download} size={14} /> Download Selection
-            </button>
             <button onClick={handleReset}
               style={{ background: t.card, color: t.muted, border: `1px solid ${t.border}`, borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
               <Icon d={icons.reset} size={14} /> Reset Map
             </button>
+
+            {/* Save AOI — appears when an area is selected or drawn */}
+            {(selectedFeatureGeoJSON || (useCustomGeoJSON && customGeoJSON) || drawnLayerExists) && (
+              <button onClick={handleSaveAoi}
+                style={{ background: "transparent", color: "#16a34a", border: "1.5px solid #16a34a", borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif", transition: "all 0.15s" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#16a34a"; e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#16a34a"; }}
+              >
+                <Icon d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" size={14} /> Save Area
+              </button>
+            )}
           </div>
 
           {/* ── Message ── */}
@@ -1607,10 +2166,10 @@ export default function Maps() {
           {/* ── Tabs ── */}
           <div style={{ display: "flex", borderBottom: `1px solid ${t.border}`, margin: "12px 16px 0", flexShrink: 0 }}>
             {[
-              { key: "info", label: "Layer Info" },
-              { key: "timeseries", label: "📈 Time Series", hide: dataset === "landcover" },
+              { key: "info",        label: "Layer Info" },
+              { key: "timeseries",  label: "📈 Time Series", hide: dataset === "landcover" },
               { key: "changestats", label: "📊 Change Stats", hide: !(dataset === "landcover" && changeMode) },
-              { key: "changemap", label: "🗺️ Change Map", hide: !(dataset === "landcover" && changeMode) },
+              { key: "changemap",   label: "🗺️ Change Map",  hide: !(dataset === "landcover" && changeMode) },
             ].filter(tab => !tab.hide).map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
                 padding: "7px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
@@ -1640,13 +2199,13 @@ export default function Maps() {
                   )}
                 </div>
 
-                {!resultsData.isLandcover && resultsData.visParams?.palette && (
+                {!resultsData.isLandcover && resultsData.visParams?.palette?.filter(c => c)?.length > 0 && (
                   <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
                     <div style={{ fontSize: 11, color: t.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, fontFamily: "sans-serif" }}>Colour Scale</div>
-                    <div style={{ height: 12, borderRadius: 6, background: `linear-gradient(to right, ${resultsData.visParams.palette.map(c => c.startsWith("#") ? c : `#${c}`).join(",")})`, marginBottom: 6 }} />
+                    <div style={{ height: 14, borderRadius: 6, border: "1px solid rgba(0,0,0,0.12)", background: `linear-gradient(to right, ${resultsData.visParams.palette.filter(Boolean).join(",")})`, marginBottom: 6 }} />
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.muted, fontFamily: "sans-serif" }}>
-                      <span>{(resultsData.visParams.min ?? 0).toFixed(2)}</span>
-                      <span>{(resultsData.visParams.max ?? 1).toFixed(2)}</span>
+                      <span>{(resultsData.legendMin ?? resultsData.visParams.min ?? 0).toFixed(2)}</span>
+                      <span>{(resultsData.legendMax ?? resultsData.visParams.max ?? 1).toFixed(2)}</span>
                     </div>
                     {resultsData.isChange && (
                       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4, fontSize: 11, fontFamily: "sans-serif", color: t.muted }}>
@@ -1711,9 +2270,47 @@ export default function Maps() {
               </>
             )}
 
+
+
             {/* ── TIME SERIES TAB ── */}
             {activeTab === "timeseries" && (
               <div>
+                {/* Controls — always visible at top of tab */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={handleTimeSeries} disabled={tsLoading || loading}
+                      style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 12, fontWeight: 600, cursor: (tsLoading || loading) ? "not-allowed" : "pointer", opacity: (tsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                      📈 {tsLoading ? "Loading..." : "Run Time Series"}
+                    </button>
+                    <select value={tsInterval} onChange={e => setTsInterval(e.target.value)}
+                      style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, borderRadius: 7, padding: "0 8px", fontSize: 12, fontFamily: "sans-serif", cursor: "pointer", width: 110, flexShrink: 0 }}>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="seasonal">Seasonal</option>
+                      {dataset === "modis" && ["NDVI","EVI"].includes(index) && (
+                        <option value="16day">16-Day (MODIS composite)</option>
+                      )}
+                      {dataset === "modis" && ["NDWI","NBR","NDMI","NDSI"].includes(index) && (
+                        <option value="daily">Daily (max 1 year)</option>
+                      )}
+                    </select>
+                  </div>
+                  {tsInterval === "seasonal" && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+                      <span style={{ fontSize: 11, color: t.muted, fontFamily: "sans-serif", whiteSpace: "nowrap" }}>Season:</span>
+                      <select value={seasonStart} onChange={e => setSeasonStart(e.target.value)}
+                        style={{ ...{background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, padding: "5px 6px", borderRadius: 6, fontSize: 11, fontFamily: "sans-serif"}, flex: 1 }}>
+                        {monthOptions.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
+                      </select>
+                      <span style={{ fontSize: 11, color: t.muted, fontFamily: "sans-serif" }}>→</span>
+                      <select value={seasonEnd} onChange={e => setSeasonEnd(e.target.value)}
+                        style={{ ...{background: t.input, border: `1px solid ${t.inputBorder}`, color: t.inputText, padding: "5px 6px", borderRadius: 6, fontSize: 11, fontFamily: "sans-serif"}, flex: 1 }}>
+                        {monthOptions.map(mo => <option key={mo.value} value={mo.value}>{mo.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
                 {tsLoading && (
                   <div style={{ textAlign: "center", padding: "40px 0", color: t.muted, fontFamily: "sans-serif", fontSize: 13 }}>
                     <div style={{ width: 32, height: 32, border: "3px solid #e2e8f0", borderTop: `3px solid ${t.accent}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
@@ -1721,9 +2318,9 @@ export default function Maps() {
                   </div>
                 )}
                 {!tsLoading && !tsData && (
-                  <div style={{ textAlign: "center", padding: "32px 16px", color: t.muted, fontFamily: "sans-serif", fontSize: 13, lineHeight: 1.6 }}>
+                  <div style={{ textAlign: "center", padding: "20px 16px", color: t.muted, fontFamily: "sans-serif", fontSize: 13, lineHeight: 1.6 }}>
                     <div style={{ fontSize: 28, marginBottom: 10 }}>📈</div>
-                    Select a dataset, index and date range, then click <b>Time Series</b> in the sidebar.
+                    Select a dataset, index and date range, then click <b>Run Time Series</b>.
                   </div>
                 )}
                 {!tsLoading && tsData && (
@@ -2047,8 +2644,91 @@ export default function Maps() {
               </button>
 
               <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 16 }}>
-                Free forever · No credit card required
+                It is free · No credit card required
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Save AOI Modal ── */}
+        {saveAoiModalOpen && (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} onClick={e => { if (e.target === e.currentTarget && !saveAoiLoading) { setSaveAoiModalOpen(false); } }}>
+            <div style={{
+              background: "white", borderRadius: 20, padding: "36px",
+              width: 420, boxShadow: "0 32px 80px rgba(0,0,0,0.25)",
+              fontFamily: "sans-serif", position: "relative",
+            }}>
+              {!saveAoiSuccess ? (
+                <>
+                  <button onClick={() => setSaveAoiModalOpen(false)} style={{
+                    position: "absolute", top: 14, right: 16, background: "none",
+                    border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af",
+                  }}>×</button>
+
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                  </div>
+
+                  <h2 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#111", marginBottom: 6 }}>Save Area</h2>
+                  <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 22, lineHeight: 1.6 }}>
+                    This area will be saved to <strong>Monitoring</strong> with its current status.
+                    {dataset && index && <> Monitoring: <strong>{dataset.toUpperCase()} {index}</strong>.</>}
+                  </p>
+
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                    Area name
+                  </label>
+                  <input
+                    value={saveAoiName}
+                    onChange={e => setSaveAoiName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && saveAoiName.trim()) _doSaveAoi(); }}
+                    placeholder="e.g. Tigray Region, Field Block A"
+                    autoFocus
+                    style={{
+                      width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e5e7eb",
+                      fontSize: 14, color: "#111", outline: "none", boxSizing: "border-box",
+                      marginBottom: saveAoiError ? 8 : 20,
+                    }}
+                  />
+
+                  {saveAoiError && (
+                    <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 16, background: "#fee2e2", padding: "8px 12px", borderRadius: 6 }}>
+                      {saveAoiError}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={_doSaveAoi}
+                    disabled={saveAoiLoading || !saveAoiName.trim()}
+                    style={{
+                      width: "100%", padding: "12px", borderRadius: 10, border: "none",
+                      background: (saveAoiLoading || !saveAoiName.trim()) ? "#e5e7eb" : "#16a34a",
+                      color: (saveAoiLoading || !saveAoiName.trim()) ? "#9ca3af" : "#fff",
+                      fontSize: 14, fontWeight: 600,
+                      cursor: (saveAoiLoading || !saveAoiName.trim()) ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {saveAoiLoading ? "Saving & computing status…" : "Save Area"}
+                  </button>
+                  <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 12, textAlign: "center" }}>
+                    Status is computed from satellite data. This may take a few seconds.
+                  </p>
+                </>
+              ) : (
+                <div style={{ textAlign: "center", padding: "8px 0" }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>✅</div>
+                  <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111", marginBottom: 8 }}>Area saved!</h2>
+                  <p style={{ fontSize: 13, color: "#6b7280" }}>
+                    View it in <a href="/my-areas" style={{ color: "#16a34a", fontWeight: 600 }}>Monitoring</a>.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2056,7 +2736,7 @@ export default function Maps() {
         {/* ── User avatar — shown when signed in ── */}
         {user && (
           <div style={{
-            position: "absolute", top: 10, right: 10, zIndex: 1000,
+            position: "absolute", bottom: 24, right: 10, zIndex: 1000,
             display: "flex", alignItems: "center", gap: 8,
             background: "white", borderRadius: 24, padding: "5px 12px 5px 5px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)", fontFamily: "sans-serif",

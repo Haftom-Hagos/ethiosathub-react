@@ -35,7 +35,18 @@ const inputStyle = {
 };
 
 export default function About() {
-  useEffect(() => { window.scrollTo(0, 0); }, []);
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      // Give React a moment to finish rendering before scrolling
+      setTimeout(() => {
+        const el = document.getElementById(hash.slice(1));
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, []);
 
   const [formData, setFormData] = useState({ name: "", email: "", message: "" });
   const [formStatus, setFormStatus] = useState(null); // null | "sending" | "sent" | "error"
@@ -281,7 +292,7 @@ export default function About() {
 
         {/* ── CTA with contact form ── */}
         <FadeIn delay={80}>
-          <div style={{
+          <div id="contact" style={{
             background: "linear-gradient(135deg, #0f172a, #1e3a2f)",
             borderRadius: 16, padding: "44px",
             display: "flex", alignItems: "flex-start",
