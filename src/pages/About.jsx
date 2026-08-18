@@ -162,8 +162,8 @@ export default function About() {
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {[
-                "🗺️ Ethiopia admin boundaries built-in",
-                "📤 Custom GeoJSON — works globally",
+                "🗺️ East Africa admin boundaries built-in",
+                "📤 Custom GeoJSON: works globally",
                 "📈 Monthly, yearly & seasonal time series",
                 "🔄 Land cover change detection",
                 "⬇️ GeoTIFF export",
