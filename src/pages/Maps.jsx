@@ -1139,9 +1139,19 @@ export default function Maps() {
   const handleReset = () => {
     const map = mapRef.current;
     if (!map) return;
-    if (overlayRef.current) map.removeLayer(overlayRef.current);
-    if (legendRef.current) map.removeControl(legendRef.current);
-    Object.values(boundaryLayersCache.current).forEach(l => map.removeLayer(l));
+    if (overlayRef.current) { try { map.removeLayer(overlayRef.current); } catch {} overlayRef.current = null; }
+    if (legendRef.current) { try { map.removeControl(legendRef.current); } catch {} legendRef.current = null; }
+    if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} layerControlRef.current = null; }
+    [p1LayerRef, p2LayerRef, changeLayerRef].forEach(ref => {
+      if (ref.current) { try { map.removeLayer(ref.current); } catch {} ref.current = null; }
+    });
+    if (drawnLayerRef.current) { try { map.removeLayer(drawnLayerRef.current); } catch {} drawnLayerRef.current = null; }
+    setDrawnLayerExists(false);
+    setActiveTool(null);
+    if (gfc2020LayerRef.current) { try { map.removeLayer(gfc2020LayerRef.current); } catch {} gfc2020LayerRef.current = null; }
+    setGfc2020Visible(false); setGfc2020TileUrl(null); setGfc2020Stats(null); setGfc2020Error(null);
+    if (baselineLayerRef.current) { try { map.removeLayer(baselineLayerRef.current); } catch {} baselineLayerRef.current = null; }
+    Object.values(boundaryLayersCache.current).forEach(l => { try { map.removeLayer(l); } catch {} });
     setDataset(""); setIndex(""); setAdminLevel(""); setFeatureList([]);
     setFeatureName(""); setSelectedFeatureGeoJSON(null); setMessage(null);
     setUseCustomGeoJSON(false); setCustomGeoJSON(null);
@@ -1158,7 +1168,6 @@ export default function Maps() {
     setAiInsights(null);
     setAiError(null);
     setShareUrl(null);
-    if (baselineLayerRef.current) { try { map.removeLayer(baselineLayerRef.current); } catch {} baselineLayerRef.current = null; }
     map.setView([9.145, 40.4897], 6);
   };
 
