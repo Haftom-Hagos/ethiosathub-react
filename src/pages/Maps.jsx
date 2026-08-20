@@ -246,6 +246,14 @@ export default function Maps() {
   const [shareUrl, setShareUrl]           = useState(null);
   const [shareCopied, setShareCopied]     = useState(false);
 
+  // ── GFC2020 / EUDR Forest Baseline state ──
+  const [gfc2020Visible, setGfc2020Visible]         = useState(false);
+  const [gfc2020TileUrl, setGfc2020TileUrl]         = useState(null);
+  const [gfc2020Stats, setGfc2020Stats]             = useState(null);
+  const [gfc2020StatsLoading, setGfc2020StatsLoading] = useState(false);
+  const [gfc2020Error, setGfc2020Error]             = useState(null);
+  const gfc2020LayerRef = useRef(null);
+
   // ── Save AOI state ──
   const [saveAoiModalOpen, setSaveAoiModalOpen] = useState(false);
   const [saveAoiName, setSaveAoiName] = useState("");
@@ -732,6 +740,58 @@ export default function Maps() {
     const area = getAoiAreaKm2(geometry);
     setAoiAreaKm2(area > 0 ? area : null);
   }, [customGeoJSON, selectedFeatureGeoJSON, useCustomGeoJSON]);
+
+  // ── GFC2020: fetch global tile URL from backend ──
+  const fetchGfc2020Tiles = async () => {
+    setGfc2020Error(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/gfc2020_tiles`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setGfc2020Error(err.detail || `Server error ${res.status}`);
+        return;
+      }
+      const data = await res.json();
+      setGfc2020TileUrl(data.tiles);
+    } catch (e) {
+      console.warn("GFC2020 tile fetch failed:", e);
+    }
+  };
+
+  // ── GFC2020: add/remove tile layer when visibility or URL changes ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (gfc2020Visible) {
+      if (!gfc2020TileUrl) { fetchGfc2020Tiles(); return; }
+      if (gfc2020LayerRef.current) { try { map.removeLayer(gfc2020LayerRef.current); } catch {} }
+      const layer = L.tileLayer(gfc2020TileUrl, { opacity: 0.8, zIndex: 4 });
+      gfc2020LayerRef.current = layer;
+      layer.addTo(map);
+    } else {
+      if (gfc2020LayerRef.current) {
+        try { map.removeLayer(gfc2020LayerRef.current); } catch {}
+        gfc2020LayerRef.current = null;
+      }
+    }
+  }, [gfc2020Visible, gfc2020TileUrl]);
+
+  // ── GFC2020: fetch stats whenever AOI or visibility changes ──
+  useEffect(() => {
+    if (!gfc2020Visible) { setGfc2020Stats(null); return; }
+    const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
+    if (!geometry) { setGfc2020Stats(null); return; }
+    setGfc2020StatsLoading(true);
+    setGfc2020Stats(null);
+    fetch(`${BACKEND_URL}/gfc2020_stats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ geometry }),
+    })
+      .then(r => r.json())
+      .then(data => { setGfc2020Stats(data); setGfc2020StatsLoading(false); })
+      .catch(e => { console.warn("GFC2020 stats failed:", e); setGfc2020StatsLoading(false); });
+  }, [gfc2020Visible, selectedFeatureGeoJSON, customGeoJSON, useCustomGeoJSON]);
 
   // ── Validate dates ──
   const validateDates = () => {
@@ -1982,6 +2042,60 @@ export default function Maps() {
                 </select>
               </div>
             </div>
+          </div>
+
+          {/* ── EUDR Forest Baseline 2020 ── */}
+          <div style={sectionStyle}>
+            <div style={sectionTitleStyle}>
+              🌲 EUDR Forest Baseline
+            </div>
+            <button
+              onClick={() => setGfc2020Visible(v => !v)}
+              style={{
+                width: "100%", padding: "8px 12px", borderRadius: 7, cursor: "pointer",
+                fontFamily: "sans-serif", fontSize: 12, fontWeight: 600,
+                background: gfc2020Visible ? "#15803d" : t.card,
+                color: gfc2020Visible ? "#fff" : t.muted,
+                border: `1px solid ${gfc2020Visible ? "#15803d" : t.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              }}>
+              {gfc2020Visible ? "✓ Forest Cover 2020 ON" : "Show Forest Cover 2020 (JRC)"}
+            </button>
+            {gfc2020Visible && (
+              <div style={{ marginTop: 6, fontSize: 11, color: t.muted, lineHeight: 1.5 }}>
+                Dark green = forested in 2020 · JRC GFC2020 v3 · 10 m · EUDR reference layer
+              </div>
+            )}
+            {gfc2020Visible && gfc2020StatsLoading && (
+              <div style={{ marginTop: 8, fontSize: 12, color: t.muted, textAlign: "center", padding: "6px 0" }}>
+                Computing forest stats…
+              </div>
+            )}
+            {gfc2020Visible && gfc2020Error && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 7, padding: "7px 10px" }}>
+                ⚠ {gfc2020Error}
+              </div>
+            )}
+            {gfc2020Visible && gfc2020Stats && !gfc2020StatsLoading && (
+              <div style={{ marginTop: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#15803d", marginBottom: 6 }}>
+                  Forest Cover — 2020 Baseline
+                </div>
+                {[
+                  ["Total Area",    `${gfc2020Stats.total_ha?.toLocaleString()} ha`],
+                  ["Forest (2020)", `${gfc2020Stats.forest_ha?.toLocaleString()} ha · ${gfc2020Stats.forest_pct}%`],
+                  ["Non-Forest",    `${gfc2020Stats.non_forest_ha?.toLocaleString()} ha · ${gfc2020Stats.non_forest_pct}%`],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, padding: "3px 0", borderBottom: "1px solid #d1fae5" }}>
+                    <span style={{ color: "#374151" }}>{label}</span>
+                    <span style={{ fontWeight: 600, color: "#15803d" }}>{value}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 6, fontSize: 10, color: "#6b7280", lineHeight: 1.4 }}>
+                  Source: JRC/GFC2020/V3 · EUDR designated reference dataset
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Mode Toggle ── */}
