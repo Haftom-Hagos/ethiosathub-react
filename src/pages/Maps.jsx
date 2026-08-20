@@ -1074,6 +1074,22 @@ export default function Maps() {
     requireAuth("download_geotiff", () => _doDownload(which), aoiAreaKm2);
   };
 
+  // ── Filename helpers ──
+  const _fmtD = (y, m, d) => `${(d||"01").padStart(2,"0")}${(m||"01").padStart(2,"0")}${String(y||"").slice(-2)}`;
+  const _dsPrefix = (ds, idx) => {
+    if (ds === "sentinel2") return "S2";
+    if (ds === "landsat")   return "LS";
+    if (ds === "landcover") return "DW";
+    if (ds === "modis")     return "MD";
+    if (ds === "climate")   return idx || "CLIM"; // SPI / VHI become the prefix
+    return ds.toUpperCase();
+  };
+  const _buildFilename = (ds, idx, sy, sm, sd, ey, em, ed, sf, suffix = "") => {
+    const prefix = _dsPrefix(ds, idx);
+    const idxPart = (ds === "climate" || ds === "landcover") ? "" : `_${idx}`;
+    return `${prefix}${idxPart}_${_fmtD(sy,sm,sd)}_${_fmtD(ey,em,ed)}_${sf}${suffix}.tif`;
+  };
+
   const _doDownload = async (which = null) => {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
@@ -1086,38 +1102,34 @@ export default function Maps() {
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 1200000);
       if (changeMode) {
-        if (dataset === "landcover") { setMessage("Change detection download not available for land cover"); setLoading(false); return; }
         if (!fromYear2 || !toYear2) { setMessage("Select Period 2 years"); setLoading(false); return; }
-        // which = 'p1' | 'p2' | 'change' (default 'change')
-        const layer = which || "change";
-        if (layer === "p1" || layer === "p2") {
-          const isP1 = layer === "p1";
+        const layer = which || (dataset === "landcover" ? "p1" : "change");
+        const isP1 = layer === "p1";
+        const isP2 = layer === "p2";
+        if (isP1 || isP2) {
+          const sY = isP1 ? fromYear  : fromYear2;  const sM = isP1 ? fromMonth  : fromMonth2;  const sD = isP1 ? fromDay  : fromDay2;
+          const eY = isP1 ? toYear    : toYear2;    const eM = isP1 ? toMonth    : toMonth2;    const eD = isP1 ? toDay    : toDay2;
           const res = await fetch(`${BACKEND_URL}/download`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ dataset, index,
-              startDate: isP1 ? `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}` : `${fromYear2}-${fromMonth2 || "01"}-${fromDay2 || "01"}`,
-              endDate:   isP1 ? `${toYear}-${toMonth || "12"}-${toDay || "31"}`       : `${toYear2}-${toMonth2 || "12"}-${toDay2 || "31"}`,
-              geometry, selectedFeature: sf }),
+            body: JSON.stringify({ dataset, index, startDate: `${sY}-${sM||"01"}-${sD||"01"}`, endDate: `${eY}-${eM||"12"}-${eD||"31"}`, geometry, selectedFeature: sf }),
             signal: controller.signal,
           });
           if (!res.ok) { const d = await res.json(); throw new Error(d.detail || `HTTP ${res.status}`); }
           const blob = await res.blob();
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement("a"); a.href = url;
-          const yr = isP1 ? `${fromYear}_${toYear}` : `${fromYear2}_${toYear2}`;
-          a.download = `${dataset}_${index}_P${isP1 ? 1 : 2}_${yr}_${sf}.tif`;
+          a.download = _buildFilename(dataset, index, sY, sM, sD, eY, eM, eD, sf, isP1 ? "_P1" : "_P2");
           document.body.appendChild(a); a.click(); a.remove();
           window.URL.revokeObjectURL(url);
           setMessage("Download successful!");
           setLoading(false); return;
         }
+        // Change map download
         const res = await fetch(`${BACKEND_URL}/download_change`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dataset, index,
-            startDate1: `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`,
-            endDate1: `${toYear}-${toMonth || "12"}-${toDay || "31"}`,
-            startDate2: `${fromYear2}-${fromMonth2 || "01"}-${fromDay2 || "01"}`,
-            endDate2: `${toYear2}-${toMonth2 || "12"}-${toDay2 || "31"}`,
+            startDate1: `${fromYear}-${fromMonth||"01"}-${fromDay||"01"}`, endDate1: `${toYear}-${toMonth||"12"}-${toDay||"31"}`,
+            startDate2: `${fromYear2}-${fromMonth2||"01"}-${fromDay2||"01"}`, endDate2: `${toYear2}-${toMonth2||"12"}-${toDay2||"31"}`,
             geometry, selectedFeature: sf }),
           signal: controller.signal,
         });
@@ -1125,7 +1137,9 @@ export default function Maps() {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a"); a.href = url;
-        a.download = `${dataset}_${index}_change_${fromYear}_${toYear}_vs_${fromYear2}_${toYear2}_${sf}.tif`;
+        const prefix = _dsPrefix(dataset, index);
+        const idxPart = (dataset === "climate" || dataset === "landcover") ? "" : `_${index}`;
+        a.download = `${prefix}${idxPart}_${_fmtD(fromYear,fromMonth,fromDay)}_${_fmtD(toYear,toMonth,toDay)}_${_fmtD(fromYear2,fromMonth2,fromDay2)}_${_fmtD(toYear2,toMonth2,toDay2)}_${sf}_change.tif`;
         document.body.appendChild(a); a.click(); a.remove();
         window.URL.revokeObjectURL(url);
         setMessage("Download successful!");
@@ -1143,7 +1157,7 @@ export default function Maps() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url;
-      a.download = `${dataset}_${index}_${fromYear}-${toYear}_${sf}.tif`;
+      a.download = _buildFilename(dataset, index, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, sf);
       document.body.appendChild(a); a.click(); a.remove();
       window.URL.revokeObjectURL(url);
       setMessage("Download successful!");
@@ -1489,10 +1503,25 @@ export default function Maps() {
 
   // Require Google sign-in before running an action, then check free-plan quota.
   // area_km2 is only relevant for download_geotiff (50 km² cap).
+  const OWNER_EMAIL = "haftomhagos21@gmail.com";
+  const RESTRICTED_ACTIONS = ["download_geotiff", "time_series"];
+
   const requireAuth = async (actionLabel, actionFn, area_km2 = null) => {
     if (!user) {
       setAuthPendingAction(() => actionFn);
       setAuthModalOpen(true);
+      return;
+    }
+    // Owner has unlimited access — bypass all quota checks
+    if (user.email === OWNER_EMAIL) {
+      saveEmail(user.email, actionLabel);
+      actionFn();
+      return;
+    }
+    // Downloads and time series are restricted to owner only for now
+    if (RESTRICTED_ACTIONS.includes(actionLabel)) {
+      setPremiumGateReason("Downloads and time series are not yet available on the free plan. Contact us to request access.");
+      setPremiumGateOpen(true);
       return;
     }
     // Check quota against Airtable before logging or running
@@ -2175,18 +2204,29 @@ export default function Maps() {
           {/* ── Action Buttons ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
-            {/* Visualize + Download — side by side */}
-            {/* Visualize hidden for land cover + change detection (use the dedicated Change Map / Stats buttons instead) */}
-            <div style={{ display: "flex", gap: 8 }}>
-              {!(dataset === "landcover" && changeMode) && (
-                <button onClick={() => handleViewSelection()} disabled={loading}
-                  style={{ flex: 1, background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
-                  <Icon d={icons.eye} size={14} /> {dataset === "landcover" ? "View Map" : "Visualize"}
-                </button>
-              )}
-              {/* In change detection mode: three download buttons; otherwise single button */}
-              {changeMode && dataset !== "landcover" ? (
-                <div style={{ display: "flex", gap: 5, flex: 1 }}>
+            {/* Visualize — hidden for land cover + change detection */}
+            {!(dataset === "landcover" && changeMode) && (
+              <button onClick={() => handleViewSelection()} disabled={loading}
+                style={{ background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                <Icon d={icons.eye} size={14} /> {dataset === "landcover" ? "View Map" : "Visualize"}
+              </button>
+            )}
+
+            {/* Download row — varies by mode */}
+            {dataset === "landcover" && changeMode ? (
+              /* Land cover change mode: Change Map | Stats row + P1 | P2 | Change download row */
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ display: "flex", gap: 5 }}>
+                  <button onClick={handleLandcoverChangeMap} disabled={changeMapLoading || loading}
+                    style={{ flex: 1, background: "#b45309", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (changeMapLoading || loading) ? "not-allowed" : "pointer", opacity: (changeMapLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                    🗺️ {changeMapLoading ? "…" : "Change Map"}
+                  </button>
+                  <button onClick={handleLandcoverStats} disabled={statsLoading || loading}
+                    style={{ flex: 1, background: "#0891b2", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (statsLoading || loading) ? "not-allowed" : "pointer", opacity: (statsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                    📊 {statsLoading ? "…" : "Stats"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 5 }}>
                   {[["P1", "p1", "#1d4ed8"], ["P2", "p2", "#ea580c"], ["Change", "change", t.btnSecondary]].map(([label, which, bg]) => (
                     <button key={which} onClick={() => handleDownloadClick(which)} disabled={loading}
                       style={{ flex: 1, background: bg, color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
@@ -2194,26 +2234,23 @@ export default function Maps() {
                     </button>
                   ))}
                 </div>
-              ) : (
-                <button onClick={() => handleDownloadClick()} disabled={loading}
-                  style={{ flex: dataset === "landcover" && changeMode ? "1 1 100%" : 1, background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
-                  <Icon d={icons.download} size={14} /> Download
-                </button>
-              )}
-            </div>
-
-            {/* Land cover buttons — only in change detection mode with landcover */}
-            {dataset === "landcover" && changeMode && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={handleLandcoverStats} disabled={statsLoading || loading}
-                  style={{ background: "#0891b2", color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 12, fontWeight: 600, cursor: (statsLoading || loading) ? "not-allowed" : "pointer", opacity: (statsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
-                  📊 {statsLoading ? "Computing..." : "Land Cover Stats"}
-                </button>
-                <button onClick={handleLandcoverChangeMap} disabled={changeMapLoading || loading}
-                  style={{ background: "#b45309", color: "#fff", border: "none", borderRadius: 7, padding: "10px 16px", fontSize: 12, fontWeight: 600, cursor: (changeMapLoading || loading) ? "not-allowed" : "pointer", opacity: (changeMapLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
-                  🗺️ {changeMapLoading ? "Computing..." : "Change Map"}
-                </button>
               </div>
+            ) : changeMode ? (
+              /* Non-landcover change mode: P1 | P2 | Change download buttons */
+              <div style={{ display: "flex", gap: 5 }}>
+                {[["P1", "p1", "#1d4ed8"], ["P2", "p2", "#ea580c"], ["Change", "change", t.btnSecondary]].map(([label, which, bg]) => (
+                  <button key={which} onClick={() => handleDownloadClick(which)} disabled={loading}
+                    style={{ flex: 1, background: bg, color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                    <Icon d={icons.download} size={12} /> {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              /* Single mode: Download */
+              <button onClick={() => handleDownloadClick()} disabled={loading}
+                style={{ background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                <Icon d={icons.download} size={14} /> Download
+              </button>
             )}
             <button onClick={handleReset}
               style={{ background: t.card, color: t.muted, border: `1px solid ${t.border}`, borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
