@@ -45,6 +45,7 @@ const DATASET_LAG_DAYS = {
   modis:     8,   // MOD13 8-day composites have ~1-week delay
   landcover: 5,   // Dynamic World mirrors S2 cadence
   climate:   45,  // CHIRPS final product lags ~6 weeks
+  hansen:    0,   // Static dataset — no lag; year range capped at 2023
 };
 
 // Returns the latest Date for which data is reliably available for a dataset.
@@ -312,6 +313,12 @@ export default function Maps() {
       { v: "NBR", t: "NBR" }, { v: "NDMI", t: "NDMI" }, { v: "NDSI", t: "NDSI" }
     ], yearRange: [2000, new Date().getFullYear()], minDate: "2000-02-18" },
     climate: { label: "Climate", icon: "🌦️", indices: [{ v: "SPI", t: "SPI" }, { v: "VHI", t: "VHI" }], yearRange: [1981, new Date().getFullYear()], minDate: "1981-01-01" },
+    hansen: { label: "Hansen Forest Change", icon: "🌳", indices: [
+      { v: "lossyear",     t: "Loss Year (2001–2023)" },
+      { v: "treecover2000", t: "Tree Cover 2000 (%)" },
+      { v: "gain",         t: "Forest Gain (2000–2012)" },
+      { v: "loss",         t: "Forest Loss (2000–2023)" },
+    ], yearRange: [2001, 2023], minDate: "2001-01-01" },
   };
 
   const LANDCOVER_PALETTE = {
@@ -656,6 +663,12 @@ export default function Maps() {
     const capY = maxAvailDate.getFullYear();
     setYearOptions(Array.from({ length: capY - minY + 1 }, (_, i) => capY - i));
     setIndex("");
+    // Hansen is static — no date range or change detection needed
+    if (dataset === "hansen") {
+      setChangeMode(false);
+      setFromYear(""); setFromMonth(""); setFromDay("");
+      setToYear(""); setToMonth(""); setToDay("");
+    }
     // Reset special intervals if switching away from MODIS
     if (dataset !== "modis") {
       setTsInterval(prev => (prev === "daily" || prev === "16day") ? "monthly" : prev);
@@ -895,7 +908,7 @@ export default function Maps() {
   // ── View Selection ──
   // ── Async metadata fetch — called after tiles load ──
   const fetchMetadataAsync = async (ds, start, end, geometry) => {
-    if (!ds || ds === "landcover" || ds === "climate") return;
+    if (!ds || ds === "landcover" || ds === "climate" || ds === "hansen") return;
     setMetadataLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/metadata`, {
@@ -915,6 +928,76 @@ export default function Maps() {
     const geometry = useCustomGeoJSON ? customGeoJSON?.geometry : selectedFeatureGeoJSON?.geometry;
     if (!geometry) return setMessage(useCustomGeoJSON ? "Upload a GeoJSON first" : "Select a feature first");
     if (!dataset || !index) return setMessage("Select dataset and index");
+
+    // ── Hansen Global Forest Change — static dataset, year-only picker ──
+    if (dataset === "hansen") {
+      if (index === "lossyear" && !fromYear) return setMessage("Select a year of loss");
+      setLoading(true); setMessage(null);
+      try {
+        const params = new URLSearchParams({ band: index });
+        if (index === "lossyear" && fromYear) params.set("year", fromYear);
+        const res = await fetch(`${BACKEND_URL}/hansen_tiles?${params}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        const map = mapRef.current;
+        if (overlayRef.current) { try { map.removeLayer(overlayRef.current); } catch {} }
+        if (legendRef.current)  { try { map.removeControl(legendRef.current); } catch {} }
+        if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} }
+
+        const overlay = L.tileLayer(data.tiles, { opacity: 0.85, zIndex: 5 }).addTo(map);
+        overlayRef.current = overlay;
+
+        const leg = data.legend || {};
+        const Legend = L.Control.extend({
+          onAdd() {
+            const div = L.DomUtil.create("div");
+            div.style.cssText = "background:white;padding:8px 10px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border-radius:6px;font-family:sans-serif;min-width:160px";
+            if (leg.type === "discrete") {
+              div.innerHTML = `<b style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${leg.label || "Hansen GFC"}</b><br>`;
+              (leg.items || []).forEach(item => {
+                div.innerHTML += `<div style="display:flex;align-items:center;margin:3px 0"><i style="background:${item.color};width:14px;height:14px;border-radius:2px;margin-right:6px;flex-shrink:0"></i><span style="font-size:11px">${item.label}</span></div>`;
+              });
+            } else {
+              const colors = (leg.colors || ["#ffffb2", "#bd0026"]).map(normalizeColor);
+              div.innerHTML = `<b style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${leg.label || "Hansen GFC"}</b>
+                <div style="width:140px;height:10px;background:linear-gradient(to right,${colors.join(",")});border-radius:3px;margin:6px 0"></div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#666"><span>${leg.min || ""}</span><span>${leg.max || ""}</span></div>`;
+            }
+            return div;
+          },
+        });
+        legendRef.current = new Legend({ position: "bottomleft" });
+        legendRef.current.addTo(map);
+
+        const layerLabel = index === "lossyear"
+          ? `Hansen Loss${fromYear ? ` ${fromYear}` : " (all years)"}`
+          : `Hansen ${DATASET_CONFIG.hansen.indices.find(o => o.v === index)?.t || index}`;
+        layerControlRef.current = L.control.layers(
+          { "Street Map": map._baseStreet, "Satellite": map._baseSat },
+          { [layerLabel]: overlay },
+          { collapsed: false }
+        ).addTo(map);
+        map.invalidateSize();
+
+        const periodLabel = index === "lossyear"
+          ? (fromYear ? String(fromYear) : "2001–2023")
+          : (index === "treecover2000" ? "2000" : "2000–2023");
+        setResultsData({
+          label: leg.label || layerLabel,
+          datasetLabel: "Hansen Forest Change",
+          period: periodLabel,
+          isChange: false, isLandcover: false,
+          visParams: {}, uniqueClasses: null, metadata: null, legendMin: 0, legendMax: 1,
+        });
+        setResultsOpen(true);
+        setMessage("Hansen layer loaded successfully.");
+      } catch (e) {
+        setMessage(`Failed to load Hansen layer: ${e.message}`);
+      } finally { setLoading(false); }
+      return;
+    }
+
     if (!fromYear || !toYear) return setMessage("Select date range");
     // AOI size check — instant, before any network call
     if (!skipAoiCheck && dataset) {
@@ -1082,6 +1165,7 @@ export default function Maps() {
     if (ds === "landcover") return "DW";
     if (ds === "modis")     return "MD";
     if (ds === "climate")   return idx || "CLIM"; // SPI / VHI become the prefix
+    if (ds === "hansen")    return "HGF"; // Hansen Global Forest Change
     return ds.toUpperCase();
   };
   const _buildFilename = (ds, idx, sy, sm, sd, ey, em, ed, sf, suffix = "") => {
@@ -2159,73 +2243,110 @@ export default function Maps() {
             )}
           </div>
 
-          {/* ── Mode Toggle ── */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>
-              <Icon d={icons.compare} size={13} />
-              Analysis Mode
+          {/* ── Mode Toggle — hidden for Hansen (static dataset) ── */}
+          {dataset !== "hansen" && (
+            <div style={sectionStyle}>
+              <div style={sectionTitleStyle}>
+                <Icon d={icons.compare} size={13} />
+                Analysis Mode
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["Single Date", false], ["Change Detection", true]].map(([label, mode]) => (
+                  <button key={label} onClick={() => { setChangeMode(mode); setMessage(null); }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 6, cursor: "pointer", fontFamily: "sans-serif", fontWeight: 600,
+                      background: changeMode === mode ? (mode ? "#ea580c" : t.btnPrimary) : t.card,
+                      color: changeMode === mode ? "#fff" : t.muted,
+                      border: `1px solid ${changeMode === mode ? (mode ? "#ea580c" : t.btnPrimary) : t.border}`,
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {[["Single Date", false], ["Change Detection", true]].map(([label, mode]) => (
-                <button key={label} onClick={() => { setChangeMode(mode); setMessage(null); }}
-                  style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 6, cursor: "pointer", fontFamily: "sans-serif", fontWeight: 600,
-                    background: changeMode === mode ? (mode ? "#ea580c" : t.btnPrimary) : t.card,
-                    color: changeMode === mode ? "#fff" : t.muted,
-                    border: `1px solid ${changeMode === mode ? (mode ? "#ea580c" : t.btnPrimary) : t.border}`,
-                  }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* ── Dates ── */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>
-              <Icon d={icons.calendar} size={13} />
-              {changeMode ? "Period 1" : "Date Range"}
-            </div>
-            <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-            <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-          </div>
-
-          {/* ── Period 2 (change detection) ── */}
-          {changeMode && (
-            <div style={sectionStyle}>
-              <div style={{ ...sectionTitleStyle, color: "#ea580c" }}>
-                <Icon d={icons.calendar} size={13} />
-                Period 2
+          {dataset === "hansen" ? (
+            /* Hansen: year-only for lossyear; nothing needed for other bands */
+            index === "lossyear" && (
+              <div style={sectionStyle}>
+                <div style={sectionTitleStyle}>
+                  <Icon d={icons.calendar} size={13} />
+                  Year of Loss
+                </div>
+                <select value={fromYear} onChange={e => setFromYear(e.target.value)} style={inputStyle}>
+                  <option value="">All years (2001–2023)</option>
+                  {Array.from({ length: 23 }, (_, i) => 2023 - i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <div style={{ marginTop: 6, fontSize: 11, color: t.muted, lineHeight: 1.5 }}>
+                  Leave blank to show all loss years in a gradient. Select a year to highlight only that year's loss.
+                </div>
               </div>
-              <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-              <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-            </div>
+            )
+          ) : (
+            <>
+              <div style={sectionStyle}>
+                <div style={sectionTitleStyle}>
+                  <Icon d={icons.calendar} size={13} />
+                  {changeMode ? "Period 1" : "Date Range"}
+                </div>
+                <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+                <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+              </div>
+
+              {/* ── Period 2 (change detection) ── */}
+              {changeMode && (
+                <div style={sectionStyle}>
+                  <div style={{ ...sectionTitleStyle, color: "#ea580c" }}>
+                    <Icon d={icons.calendar} size={13} />
+                    Period 2
+                  </div>
+                  <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+                  <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+                </div>
+              )}
+            </>
           )}
 
           {/* ── Action Buttons ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
-            {/* Visualize — hidden for land cover + change detection */}
-            {!(dataset === "landcover" && changeMode) && (
+            {/* Visualize — hidden for land cover + change detection; always shown for Hansen */}
+            {(dataset === "hansen" || !(dataset === "landcover" && changeMode)) && (
               <button onClick={() => handleViewSelection()} disabled={loading}
                 style={{ background: t.btnPrimary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
                 <Icon d={icons.eye} size={14} /> {dataset === "landcover" ? "View Map" : "Visualize"}
               </button>
             )}
 
-            {/* Download row — varies by mode */}
-            {dataset === "landcover" && changeMode ? (
-              /* Land cover change mode: Change Map | Stats row + P1 | P2 | Change download row */
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <div style={{ display: "flex", gap: 5 }}>
-                  <button onClick={handleLandcoverChangeMap} disabled={changeMapLoading || loading}
-                    style={{ flex: 1, background: "#b45309", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (changeMapLoading || loading) ? "not-allowed" : "pointer", opacity: (changeMapLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
-                    🗺️ {changeMapLoading ? "…" : "Change Map"}
-                  </button>
-                  <button onClick={handleLandcoverStats} disabled={statsLoading || loading}
-                    style={{ flex: 1, background: "#0891b2", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (statsLoading || loading) ? "not-allowed" : "pointer", opacity: (statsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
-                    📊 {statsLoading ? "…" : "Stats"}
-                  </button>
+            {/* Download row — hidden for Hansen; varies by mode otherwise */}
+            {dataset !== "hansen" && (
+              dataset === "landcover" && changeMode ? (
+                /* Land cover change mode: Change Map | Stats row + P1 | P2 | Change download row */
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <button onClick={handleLandcoverChangeMap} disabled={changeMapLoading || loading}
+                      style={{ flex: 1, background: "#b45309", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (changeMapLoading || loading) ? "not-allowed" : "pointer", opacity: (changeMapLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                      🗺️ {changeMapLoading ? "…" : "Change Map"}
+                    </button>
+                    <button onClick={handleLandcoverStats} disabled={statsLoading || loading}
+                      style={{ flex: 1, background: "#0891b2", color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: (statsLoading || loading) ? "not-allowed" : "pointer", opacity: (statsLoading || loading) ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                      📊 {statsLoading ? "…" : "Stats"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    {[["P1", "p1", "#1d4ed8"], ["P2", "p2", "#ea580c"], ["Change", "change", t.btnSecondary]].map(([label, which, bg]) => (
+                      <button key={which} onClick={() => handleDownloadClick(which)} disabled={loading}
+                        style={{ flex: 1, background: bg, color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
+                        <Icon d={icons.download} size={12} /> {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              ) : changeMode ? (
+                /* Non-landcover change mode: P1 | P2 | Change download buttons */
                 <div style={{ display: "flex", gap: 5 }}>
                   {[["P1", "p1", "#1d4ed8"], ["P2", "p2", "#ea580c"], ["Change", "change", t.btnSecondary]].map(([label, which, bg]) => (
                     <button key={which} onClick={() => handleDownloadClick(which)} disabled={loading}
@@ -2234,23 +2355,13 @@ export default function Maps() {
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : changeMode ? (
-              /* Non-landcover change mode: P1 | P2 | Change download buttons */
-              <div style={{ display: "flex", gap: 5 }}>
-                {[["P1", "p1", "#1d4ed8"], ["P2", "p2", "#ea580c"], ["Change", "change", t.btnSecondary]].map(([label, which, bg]) => (
-                  <button key={which} onClick={() => handleDownloadClick(which)} disabled={loading}
-                    style={{ flex: 1, background: bg, color: "#fff", border: "none", borderRadius: 7, padding: "10px 4px", fontSize: 11, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontFamily: "sans-serif" }}>
-                    <Icon d={icons.download} size={12} /> {label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              /* Single mode: Download */
-              <button onClick={() => handleDownloadClick()} disabled={loading}
-                style={{ background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
-                <Icon d={icons.download} size={14} /> Download
-              </button>
+              ) : (
+                /* Single mode: Download */
+                <button onClick={() => handleDownloadClick()} disabled={loading}
+                  style={{ background: t.btnSecondary, color: "#fff", border: "none", borderRadius: 7, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "sans-serif" }}>
+                  <Icon d={icons.download} size={14} /> Download
+                </button>
+              )
             )}
             <button onClick={handleReset}
               style={{ background: t.card, color: t.muted, border: `1px solid ${t.border}`, borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "sans-serif" }}>
