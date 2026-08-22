@@ -314,11 +314,11 @@ export default function Maps() {
     ], yearRange: [2000, new Date().getFullYear()], minDate: "2000-02-18" },
     climate: { label: "Climate", icon: "🌦️", indices: [{ v: "SPI", t: "SPI" }, { v: "VHI", t: "VHI" }], yearRange: [1981, new Date().getFullYear()], minDate: "1981-01-01" },
     hansen: { label: "Hansen Forest Change", icon: "🌳", indices: [
-      { v: "lossyear",     t: "Loss Year (2001–2023)" },
+      { v: "lossyear",     t: "Loss Year (2001–2025)" },
       { v: "treecover2000", t: "Tree Cover 2000 (%)" },
-      { v: "gain",         t: "Forest Gain (2000–2012)" },
-      { v: "loss",         t: "Forest Loss (2000–2023)" },
-    ], yearRange: [2001, 2023], minDate: "2001-01-01" },
+      { v: "gain",         t: "Forest Gain (2000–2020)" },
+      { v: "loss",         t: "Forest Loss (2000–2025)" },
+    ], yearRange: [2001, 2025], minDate: "2001-01-01" },
   };
 
   const LANDCOVER_PALETTE = {
@@ -981,8 +981,8 @@ export default function Maps() {
         map.invalidateSize();
 
         const periodLabel = index === "lossyear"
-          ? (fromYear ? String(fromYear) : "2001–2023")
-          : (index === "treecover2000" ? "2000" : "2000–2023");
+          ? (fromYear ? String(fromYear) : "2001–2025")
+          : (index === "treecover2000" ? "2000" : "2000–2025");
         setResultsData({
           label: leg.label || layerLabel,
           datasetLabel: "Hansen Forest Change",
@@ -2275,8 +2275,8 @@ export default function Maps() {
                   Year of Loss
                 </div>
                 <select value={fromYear} onChange={e => setFromYear(e.target.value)} style={inputStyle}>
-                  <option value="">All years (2001–2023)</option>
-                  {Array.from({ length: 23 }, (_, i) => 2023 - i).map(y => (
+                  <option value="">All years (2001–2025)</option>
+                  {Array.from({ length: 25 }, (_, i) => 2025 - i).map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
