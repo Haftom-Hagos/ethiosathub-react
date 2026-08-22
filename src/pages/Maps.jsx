@@ -44,7 +44,7 @@ const DATASET_LAG_DAYS = {
   landsat:   16,  // Landsat 8/9 revisit is 16 days; use conservative lag
   modis:     8,   // MOD13 8-day composites have ~1-week delay
   landcover: 5,   // Dynamic World mirrors S2 cadence
-  climate:   45,  // CHIRPS final product lags ~6 weeks
+  climate:   21,  // CHIRPS preliminary available ~2-3 weeks after end of dekad
   hansen:    0,   // Static dataset — no lag; year range capped at 2023
 };
 
@@ -310,9 +310,17 @@ export default function Maps() {
     ], yearRange: [1984, new Date().getFullYear()], minDate: "1984-03-01" },
     modis: { label: "MODIS", icon: "🌐", indices: [
       { v: "NDVI", t: "NDVI" }, { v: "EVI", t: "EVI" }, { v: "NDWI", t: "NDWI" },
-      { v: "NBR", t: "NBR" }, { v: "NDMI", t: "NDMI" }, { v: "NDSI", t: "NDSI" }
+      { v: "NBR", t: "NBR" }, { v: "NDMI", t: "NDMI" }, { v: "NDSI", t: "NDSI" },
+      { v: "VHI",  t: "VHI (Vegetation Health Index)" },
     ], yearRange: [2000, new Date().getFullYear()], minDate: "2000-02-18" },
-    climate: { label: "Climate", icon: "🌦️", indices: [{ v: "SPI", t: "SPI" }, { v: "VHI", t: "VHI" }], yearRange: [1981, new Date().getFullYear()], minDate: "1981-01-01" },
+    climate: { label: "CHIRPS", icon: "🌦️", indices: [
+      { v: "SPI",        t: "SPI (Standardized Precipitation Index)" },
+      { v: "mean_rf",    t: "Mean RF (Mean Daily Rainfall, mm/day)" },
+      { v: "total_rf",   t: "Total RF (Total Rainfall, mm)" },
+      { v: "anomaly_rf", t: "Rainfall Anomaly (vs 1981–2010 mean)" },
+      { v: "dry_days",   t: "Dry Days (days < 1 mm)" },
+      { v: "max_rf",     t: "Max Daily RF (Peak Rainfall, mm)" },
+    ], yearRange: [1981, new Date().getFullYear()], minDate: "1981-01-01" },
     hansen: { label: "Hansen Forest Change", icon: "🌳", indices: [
       { v: "lossyear",     t: "Loss Year (2001–2025)" },
       { v: "treecover2000", t: "Tree Cover 2000 (%)" },
