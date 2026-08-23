@@ -170,6 +170,8 @@ export default function Maps() {
   
   const drawnLayerRef = useRef(null);
   const drawingStateRef = useRef({ active: false, type: null, points: [], tempLayer: null });
+  const activeLayerContextRef = useRef(null); // tracks the currently-shown layer for pixel queries
+  const pixelPopupRef = useRef(null);
   const [activeTool, setActiveTool] = useState(null); // 'rectangle'|'polygon'|'circle'|'point'
   const [drawnLayerExists, setDrawnLayerExists] = useState(false);
 
@@ -329,6 +331,9 @@ export default function Maps() {
     ], yearRange: [2001, 2025], minDate: "2001-01-01" },
   };
 
+  // Dynamic World class labels (index matches GEE label band 0–8)
+  const DW_CLASSES = ["Water","Trees","Grass","Flooded Vegetation","Crops","Shrub & Scrub","Built","Bare","Snow & Ice"];
+
   const LANDCOVER_PALETTE = {
     water: "#419BDF", trees: "#397D49", grass: "#88B053",
     flooded_vegetation: "#7A87C6", crops: "#E49635", shrub_and_scrub: "#DFC35A",
@@ -343,9 +348,9 @@ export default function Maps() {
   const AOI_LIMITS = {
     sentinel2: { warn: 4500,   view: 6000,   timeseries: 1500,   download: 3000   },
     landsat:   { warn: 15000,  view: 20000,  timeseries: 6000,   download: 10000  },
-    modis:     { warn: 150000, view: 200000, timeseries: 80000,  download: 120000 },
-    landcover: { warn: 7500,   view: 10000,  timeseries: 3000,   download: 6000   },
-    climate:   { warn: 300000, view: 400000, timeseries: 150000, download: 250000 },
+    modis:     { warn: 300000,  view: 400000,  timeseries: 160000,  download: 240000  },
+    landcover: { warn: 7500,    view: 10000,   timeseries: 3000,    download: 6000    },
+    climate:   { warn: 3000000, view: 4000000, timeseries: 1500000, download: 2500000 },
   };
 
   // Approximate AOI area in km² from GeoJSON geometry
@@ -596,6 +601,81 @@ export default function Maps() {
     };
   }, []);
 
+  // ── Pixel value cursor: click to query the value under the cursor ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const fetchPixelVal = async (dataset, index, start, end, lat, lng) => {
+      try {
+        const r = await fetch(
+          `${BACKEND_URL}/pixel_value?lat=${lat}&lng=${lng}&dataset=${encodeURIComponent(dataset)}&index=${encodeURIComponent(index)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+        );
+        if (!r.ok) return null;
+        const d = await r.json();
+        return d.value ?? null;
+      } catch { return null; }
+    };
+
+    const fmtVal = (v, dataset, index) => {
+      if (v === null || v === undefined) return "N/A";
+      if (dataset === "landcover") return DW_CLASSES[Math.round(v)] ?? "Unknown";
+      if (index === "lossyear")     return v === 0 ? "No loss" : `Loss in ${2000 + Math.round(v)}`;
+      if (index === "gain")         return v === 1 ? "Gain" : "No gain";
+      if (index === "loss")         return v === 1 ? "Loss" : "No loss";
+      if (index === "treecover2000") return `${Math.round(v)}%`;
+      if (index === "dry_days")     return `${Math.round(v)} days`;
+      return parseFloat(v).toFixed(3);
+    };
+
+    const onPixelClick = async (e) => {
+      if (drawingStateRef.current.active) return;
+      const ctx = activeLayerContextRef.current;
+      if (!ctx) return;
+
+      const { lat, lng } = e.latlng;
+      // Close any previous pixel popup
+      if (pixelPopupRef.current) { try { map.closePopup(pixelPopupRef.current); } catch {} }
+      const popup = L.popup({ maxWidth: 280, className: "pixel-popup" })
+        .setLatLng(e.latlng)
+        .setContent('<div style="font-size:12px;padding:2px 4px">⏳ Loading…</div>');
+      popup.openOn(map);
+      pixelPopupRef.current = popup;
+
+      try {
+        if (ctx.changeMode) {
+          const [v1, v2] = await Promise.all([
+            fetchPixelVal(ctx.dataset, ctx.index, ctx.p1Start, ctx.p1End, lat, lng),
+            fetchPixelVal(ctx.dataset, ctx.index, ctx.p2Start, ctx.p2End, lat, lng),
+          ]);
+          const f1 = fmtVal(v1, ctx.dataset, ctx.index);
+          const f2 = fmtVal(v2, ctx.dataset, ctx.index);
+          const changeStr = ctx.isLandcover
+            ? "N/A"
+            : (v1 !== null && v2 !== null ? (v2 - v1 >= 0 ? "+" : "") + (v2 - v1).toFixed(3) : "N/A");
+          popup.setContent(
+            `<div style="font-size:12px;line-height:1.8;padding:2px 4px">` +
+            `<b style="color:#3b82f6">Period 1:</b> ${f1}<br/>` +
+            `<b style="color:#16a34a">Period 2:</b> ${f2}<br/>` +
+            `<b>Change:</b> ${changeStr}` +
+            `</div>`
+          );
+        } else {
+          const v = await fetchPixelVal(ctx.dataset, ctx.index, ctx.start, ctx.end, lat, lng);
+          const label = ctx.index === "dynamic" ? "Land Cover" : ctx.index.toUpperCase();
+          popup.setContent(
+            `<div style="font-size:12px;padding:2px 4px"><b>${label}:</b> ${fmtVal(v, ctx.dataset, ctx.index)}</div>`
+          );
+        }
+      } catch {
+        popup.setContent('<div style="font-size:12px;color:#dc2626;padding:2px 4px">Error reading pixel</div>');
+      }
+    };
+
+    map.on("click", onPixelClick);
+    return () => map.off("click", onPixelClick);
+  }, []); // uses refs only — no deps needed
+
   // ── Activate a drawing tool ──
   const startDrawing = (type) => {
     const map = mapRef.current;
@@ -682,6 +762,7 @@ export default function Maps() {
       setTsInterval(prev => (prev === "daily" || prev === "16day") ? "monthly" : prev);
     }
     // Clear stale chart/AI data but keep the panel open so the user sees it's empty
+    activeLayerContextRef.current = null;
     setResultsData(null);
     setTsData(null);
     setStatsData(null);
@@ -720,6 +801,12 @@ export default function Maps() {
     }).addTo(map);
     boundaryLayersCache.current[adminLevel] = layer;
     map.fitBounds(layer.getBounds());
+    // Level 0 has exactly one feature (the whole country) — auto-select it
+    if (adminLevel === "adm0") {
+      const firstFeature = geojsonData["adm0"]?.features[0];
+      const name = firstFeature?.properties?.[prop];
+      if (name) { setFeatureName(name); setSelectedFeatureGeoJSON(firstFeature.geometry); }
+    }
   }, [adminLevel, geojsonData, useCustomGeoJSON]);
 
   // ── Custom GeoJSON layer ──
@@ -786,7 +873,7 @@ export default function Maps() {
     if (gfc2020Visible) {
       if (!gfc2020TileUrl) { fetchGfc2020Tiles(); return; }
       if (gfc2020LayerRef.current) { try { map.removeLayer(gfc2020LayerRef.current); } catch {} }
-      const layer = L.tileLayer(gfc2020TileUrl, { opacity: 0.8, zIndex: 4 });
+      const layer = L.tileLayer(gfc2020TileUrl, { opacity: 1, zIndex: 4 });
       gfc2020LayerRef.current = layer;
       layer.addTo(map);
     } else {
@@ -848,7 +935,7 @@ export default function Maps() {
     if (legendRef.current) map.removeControl(legendRef.current);
     const tileUrl = data.tiles || data.mode_tiles;
     if (!tileUrl?.startsWith("http")) { setMessage(`No tiles returned for ${datasetKey}. Try a different date range.`); return; }
-    const overlay = L.tileLayer(tileUrl, { opacity: 0.85, zIndex: 5 }).addTo(map);
+    const overlay = L.tileLayer(tileUrl, { opacity: 1, zIndex: 5 }).addTo(map);
     overlayRef.current = overlay;
     overlay.on("tileerror", (err) => console.error("Tile error:", err));
     if (data.bounds?.length) {
@@ -911,6 +998,15 @@ export default function Maps() {
       legendMax: max,
     });
     setResultsOpen(true);
+    // Track current layer so pixel-click handler knows what to query
+    activeLayerContextRef.current = {
+      dataset: datasetKey,
+      index,
+      start: `${fromYear}-${fromMonth || "01"}-${fromDay || "01"}`,
+      end:   `${toYear}-${toMonth || "12"}-${toDay || "31"}`,
+      changeMode: false,
+      isLandcover: datasetKey === "landcover",
+    };
   };
 
   // ── View Selection ──
@@ -953,7 +1049,7 @@ export default function Maps() {
         if (legendRef.current)  { try { map.removeControl(legendRef.current); } catch {} }
         if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} }
 
-        const overlay = L.tileLayer(data.tiles, { opacity: 0.85, zIndex: 5 }).addTo(map);
+        const overlay = L.tileLayer(data.tiles, { opacity: 1, zIndex: 5 }).addTo(map);
         overlayRef.current = overlay;
 
         const leg = data.legend || {};
@@ -999,6 +1095,11 @@ export default function Maps() {
           visParams: {}, uniqueClasses: null, metadata: null, legendMin: 0, legendMax: 1,
         });
         setResultsOpen(true);
+        activeLayerContextRef.current = {
+          dataset: "hansen", index,
+          start: "2000-01-01", end: "2025-12-31",
+          changeMode: false, isLandcover: false,
+        };
         setMessage("Hansen layer loaded successfully.");
       } catch (e) {
         setMessage(`Failed to load Hansen layer: ${e.message}`);
@@ -1054,9 +1155,9 @@ export default function Maps() {
         if (legendRef.current)  { try { map.removeControl(legendRef.current); } catch {} }
         if (layerControlRef.current) { try { map.removeControl(layerControlRef.current); } catch {} }
 
-        p1LayerRef.current     = L.tileLayer(url1, { opacity: 0.85, zIndex: 5 });
-        p2LayerRef.current     = L.tileLayer(url2, { opacity: 0.85, zIndex: 6 });
-        changeLayerRef.current = L.tileLayer(urlC, { opacity: 0.85, zIndex: 7 });
+        p1LayerRef.current     = L.tileLayer(url1, { opacity: 1, zIndex: 5 });
+        p2LayerRef.current     = L.tileLayer(url2, { opacity: 1, zIndex: 6 });
+        changeLayerRef.current = L.tileLayer(urlC, { opacity: 1, zIndex: 7 });
 
         // Add all three by default
         [p1LayerRef.current, p2LayerRef.current, changeLayerRef.current].forEach(l => l.addTo(map));
@@ -1107,6 +1208,10 @@ export default function Maps() {
           uniqueClasses: null, metadata: null,
         });
         setResultsOpen(true);
+        activeLayerContextRef.current = {
+          dataset, index, changeMode: true, isLandcover: false,
+          p1Start: s1, p1End: e1, p2Start: s2, p2End: e2,
+        };
         setMessage(`Change detection loaded — 3 layers added. Use checkboxes top-right to toggle.`);
       } catch (e) {
         const msg = e.message || "";
@@ -1492,9 +1597,9 @@ export default function Maps() {
       const p2Label = `🟩 Land Cover P2 (${fmtLegend(fromYear2, fromMonth2, fromDay2)}–${fmtLegend(toYear2, toMonth2, toDay2)})`;
       const chLabel = `🔴 Stable vs Changed`;
 
-      p1LayerRef.current    = L.tileLayer(url1, { opacity: 0.85, zIndex: 5 });
-      p2LayerRef.current    = L.tileLayer(url2, { opacity: 0.85, zIndex: 6 });
-      changeLayerRef.current = L.tileLayer(urlC, { opacity: 0.85, zIndex: 7 });
+      p1LayerRef.current    = L.tileLayer(url1, { opacity: 1, zIndex: 5 });
+      p2LayerRef.current    = L.tileLayer(url2, { opacity: 1, zIndex: 6 });
+      changeLayerRef.current = L.tileLayer(urlC, { opacity: 1, zIndex: 7 });
 
       // Add all three by default
       [p1LayerRef.current, p2LayerRef.current, changeLayerRef.current].forEach(l => l.addTo(map));
@@ -1534,6 +1639,11 @@ export default function Maps() {
       setChangeMapData(dChange);
       setActiveTab("changemap");
       setResultsOpen(true);
+      activeLayerContextRef.current = {
+        dataset: "landcover", index: "dynamic", changeMode: true, isLandcover: true,
+        p1Start: body1.startDate, p1End: body1.endDate,
+        p2Start: body2.startDate, p2End: body2.endDate,
+      };
       setMessage("Land cover change map loaded — 3 layers added to map.");
 
       // Update results panel
@@ -2110,6 +2220,7 @@ export default function Maps() {
                       {country && (() => {
                         const cfg = COUNTRIES.find(c => c.key === country);
                         return [
+                          <option key="adm0" value="adm0">Level 0 (Country)</option>,
                           cfg?.maxLevel >= 1 && <option key="adm1" value="adm1">Level 1</option>,
                           cfg?.maxLevel >= 2 && <option key="adm2" value="adm2">Level 2</option>,
                           cfg?.maxLevel >= 3 && <option key="adm3" value="adm3">Level 3</option>,
