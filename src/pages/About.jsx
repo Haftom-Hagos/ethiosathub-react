@@ -221,7 +221,7 @@ export default function About() {
                   fontSize: 11, fontWeight: 700, color: "#22c55e",
                   textTransform: "uppercase", letterSpacing: "0.09em",
                   fontFamily: "sans-serif", marginBottom: 12,
-                }}>Founder & Lead Developer</div>
+                }}>Founder & Lead Developer: Lecturer · Mekelle University</div>
                 <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.7, margin: 0, fontFamily: "sans-serif" }}>
                   Geospatial analyst who designed and built Hwasat Geosense, combining Earth Observation expertise with modern web technologies 
                   to make satellite analysis accessible to all.
