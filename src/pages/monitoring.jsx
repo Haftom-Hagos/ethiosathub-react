@@ -568,9 +568,17 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
 const ANALYSIS_DATASETS = [
   { v: "sentinel2", t: "Sentinel-2 (10 m)", indices: ["NDVI","EVI","NDWI","NBR","NDBI","MNDWI","BSI","SAVI","NDMI","GNDVI"] },
   { v: "landsat",   t: "Landsat (30 m)",    indices: ["NDVI","EVI","NDWI","NBR","NDBI","BSI","SAVI","NDMI","GNDVI"] },
-  { v: "modis",     t: "MODIS (250 m)",     indices: ["NDVI","EVI","NDWI","NBR","NDMI"] },
+  { v: "modis",     t: "MODIS (250 m)",     indices: ["NDVI","EVI","NDVI_Daily","EVI_Daily","NDWI","NBR","NDMI"] },
   { v: "climate",   t: "Climate / CHIRPS",  indices: ["VHI","SPI"] },
 ];
+
+// Display labels for indices whose key differs from what users should see
+const INDEX_LABELS = {
+  NDVI:       "NDVI (16-day Composite)",
+  EVI:        "EVI (16-day Composite)",
+  NDVI_Daily: "NDVI Daily",
+  EVI_Daily:  "EVI Daily",
+};
 const ANALYSIS_MONTHS = [
   {v:"01",t:"Jan"},{v:"02",t:"Feb"},{v:"03",t:"Mar"},{v:"04",t:"Apr"},
   {v:"05",t:"May"},{v:"06",t:"Jun"},{v:"07",t:"Jul"},{v:"08",t:"Aug"},
