@@ -150,7 +150,7 @@ const Icon = ({ d, size = 16 }) => (
 // ── Monitoring category definitions ───────────────────────────────────────────
 const STATS_CATEGORIES = [
   { id: "crop",        icon: "🌾", label: "Crop Monitoring",     desc: "Field-level crop health & yield outlook",           color: "#16a34a", datasetLabel: "Sentinel-2 · 10 m" },
-  { id: "drought",     icon: "🏜️", label: "Drought Monitoring",  desc: "Water stress, drought severity & rainfall deficit", color: "#dc2626", datasetLabel: "MODIS + Climate"   },
+  { id: "drought",     icon: "🏜️", label: "Drought Monitoring",  desc: "Water stress, drought severity & rainfall deficit", color: "#dc2626", datasetLabel: "MODIS + CHIRPS"    },
   { id: "rangeland",   icon: "🐄", label: "Rangeland & Pasture", desc: "Grazing land quality vs. historical baseline",      color: "#ca8a04", datasetLabel: "MODIS · 250 m"     },
   { id: "forest",      icon: "🌳", label: "Forest & Woodland",   desc: "Tree cover health, fire damage & moisture stress",  color: "#15803d", datasetLabel: "Landsat · 30 m"    },
   { id: "water",       icon: "💧", label: "Water & Flooding",    desc: "Open water extent & flood mapping",                color: "#2563eb", datasetLabel: "Sentinel-2 · 10 m" },
@@ -544,7 +544,7 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
 
               {/* Source note */}
               <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 16, lineHeight: 1.6 }}>
-                {catDef?.datasetLabel} · VCI uses MODIS 2000–2023 baseline · VHI and SPI from climate datasets.
+                {catDef?.datasetLabel} · VCI uses MODIS 2000–2023 baseline · VHI from MODIS (250 m) · SPI from CHIRPS.
               </p>
 
               {/* Actions */}
