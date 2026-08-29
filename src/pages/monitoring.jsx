@@ -585,8 +585,10 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
   const [index,         setIndex]         = useState(initialIndex   || "NDVI");
   const [fromYear,      setFromYear]      = useState(String(curYear));
   const [fromMonth,     setFromMonth]     = useState("06");
+  const [fromDay,       setFromDay]       = useState("01");
   const [toYear,        setToYear]        = useState(String(curYear));
   const [toMonth,       setToMonth]       = useState("08");
+  const [toDay,         setToDay]         = useState("28");
   const [loading,       setLoading]       = useState(false);
   const [result,        setResult]        = useState(null);
   const [districtData,  setDistrictData]  = useState(null);
@@ -606,8 +608,8 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
 
   const handleRun = async () => {
     setLoading(true); setResult(null); setDistrictData(null); setError(null);
-    const startDate = `${fromYear}-${fromMonth}-01`;
-    const endDate   = `${toYear}-${toMonth}-28`;
+    const startDate = `${fromYear}-${fromMonth}-${fromDay}`;
+    const endDate   = `${toYear}-${toMonth}-${toDay}`;
     try {
       // Auto-detect finest sub-level (3 → 2) — matches by parent property name first (Maps.jsx approach)
       const subResult    = await _loadSubLevelFeatures(aoi.name, aoi.geometry);
@@ -649,8 +651,8 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
     if (!result) return;
     setReportLoading(true);
     try {
-      const startDate = `${fromYear}-${fromMonth}-01`;
-      const endDate   = `${toYear}-${toMonth}-28`;
+      const startDate = `${fromYear}-${fromMonth}-${fromDay}`;
+      const endDate   = `${toYear}-${toMonth}-${toDay}`;
       const res = await fetch(`${BACKEND_URL}/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -710,21 +712,26 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
           <div>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>Index</div>
             <select value={index} onChange={e => setIndex(e.target.value)} style={iSt}>
-              {indexOptions.map(ix => <option key={ix} value={ix}>{ix}</option>)}
+              {indexOptions.map(ix => <option key={ix} value={ix}>{INDEX_LABELS[ix] || ix}</option>)}
             </select>
           </div>
         </div>
 
         {/* Date range */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-          {[["From", fromMonth, setFromMonth, fromYear, setFromYear], ["To", toMonth, setToMonth, toYear, setToYear]].map(([label, mo, setMo, yr, setYr]) => (
+          {[["From", fromMonth, setFromMonth, fromYear, setFromYear, fromDay, setFromDay], ["To", toMonth, setToMonth, toYear, setToYear, toDay, setToDay]].map(([label, mo, setMo, yr, setYr, dy, setDy]) => (
             <div key={label}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>{label}</div>
-              <div style={{ display: "flex", gap: 5 }}>
+              <div style={{ display: "flex", gap: 4 }}>
+                <select value={dy} onChange={e => setDy(e.target.value)} style={{ ...iSt, flex: "0 0 52px" }}>
+                  {Array.from({length: 31}, (_, i) => String(i + 1).padStart(2, "0")).map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
                 <select value={mo} onChange={e => setMo(e.target.value)} style={{ ...iSt, flex: 1 }}>
                   {ANALYSIS_MONTHS.map(m => <option key={m.v} value={m.v}>{m.t}</option>)}
                 </select>
-                <select value={yr} onChange={e => setYr(e.target.value)} style={{ ...iSt, flex: 1.4 }}>
+                <select value={yr} onChange={e => setYr(e.target.value)} style={{ ...iSt, flex: "0 0 68px" }}>
                   {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
                 </select>
               </div>
