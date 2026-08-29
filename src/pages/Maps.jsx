@@ -48,9 +48,16 @@ const DATASET_LAG_DAYS = {
   hansen:    0,   // Static dataset — no lag; year range capped at 2023
 };
 
-// Returns the latest Date for which data is reliably available for a dataset.
-const getDatasetMaxDate = (dsKey) => {
-  const lag = DATASET_LAG_DAYS[dsKey] ?? 7;
+// Per-index lag overrides (days) — for indices with longer processing lag than the dataset default.
+const INDEX_LAG_OVERRIDES = {
+  NDVI: 35,   // MOD13Q1 16-day composite + ~3-week processing lag
+  EVI:  35,   // MOD13Q1 16-day composite + ~3-week processing lag
+  VHI:  35,   // uses MOD13Q1 NDVI — same lag
+};
+
+// Returns the latest Date for which data is reliably available for a dataset/index.
+const getDatasetMaxDate = (dsKey, indexKey = "") => {
+  const lag = (dsKey === "modis" ? INDEX_LAG_OVERRIDES[indexKey] : undefined) ?? DATASET_LAG_DAYS[dsKey] ?? 7;
   const d = new Date();
   d.setDate(d.getDate() - lag);
   return d;
@@ -311,8 +318,12 @@ export default function Maps() {
       { v: "GCI", t: "GCI" }, { v: "MSI", t: "MSI" }, { v: "BSI", t: "BSI" }, { v: "SIPI", t: "SIPI" }
     ], yearRange: [1984, new Date().getFullYear()], minDate: "1984-03-01" },
     modis: { label: "MODIS", icon: "🌐", indices: [
-      { v: "NDVI", t: "NDVI" }, { v: "EVI", t: "EVI" }, { v: "NDWI", t: "NDWI" },
-      { v: "NBR", t: "NBR" }, { v: "NDMI", t: "NDMI" }, { v: "NDSI", t: "NDSI" },
+      { v: "NDVI",       t: "NDVI (16-day Composite)" },
+      { v: "EVI",        t: "EVI (16-day Composite)" },
+      { v: "NDVI_Daily", t: "NDVI Daily" },
+      { v: "EVI_Daily",  t: "EVI Daily" },
+      { v: "NDWI", t: "NDWI" }, { v: "NBR", t: "NBR" },
+      { v: "NDMI", t: "NDMI" }, { v: "NDSI", t: "NDSI" },
       { v: "VHI",  t: "VHI (Vegetation Health Index)" },
     ], yearRange: [2000, new Date().getFullYear()], minDate: "2000-02-18" },
     climate: { label: "CHIRPS", icon: "🌦️", indices: [
@@ -2411,8 +2422,8 @@ export default function Maps() {
                   <Icon d={icons.calendar} size={13} />
                   {changeMode ? "Period 1" : "Date Range"}
                 </div>
-                <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-                <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+                <DateRow label="From" y={fromYear} m={fromMonth} d={fromDay} setY={setFromYear} setM={setFromMonth} setD={setFromDay} maxDate={dataset ? getDatasetMaxDate(dataset, index) : null} />
+                <DateRow label="To" y={toYear} m={toMonth} d={toDay} setY={setToYear} setM={setToMonth} setD={setToDay} maxDate={dataset ? getDatasetMaxDate(dataset, index) : null} />
               </div>
 
               {/* ── Period 2 (change detection) ── */}
@@ -2422,8 +2433,8 @@ export default function Maps() {
                     <Icon d={icons.calendar} size={13} />
                     Period 2
                   </div>
-                  <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
-                  <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset) : null} />
+                  <DateRow label="From" y={fromYear2} m={fromMonth2} d={fromDay2} setY={setFromYear2} setM={setFromMonth2} setD={setFromDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset, index) : null} />
+                  <DateRow label="To" y={toYear2} m={toMonth2} d={toDay2} setY={setToYear2} setM={setToMonth2} setD={setToDay2} color="#ea580c" maxDate={dataset ? getDatasetMaxDate(dataset, index) : null} />
                 </div>
               )}
             </>
