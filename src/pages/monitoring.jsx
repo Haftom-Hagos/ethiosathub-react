@@ -566,10 +566,20 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
 
 // ── Analysis datasets ─────────────────────────────────────────────────────────
 const ANALYSIS_DATASETS = [
-  { v: "sentinel2", t: "Sentinel-2 (10 m)", indices: ["NDVI","EVI","NDWI","NBR","NDBI","MNDWI","BSI","SAVI","NDMI","GNDVI"] },
-  { v: "landsat",   t: "Landsat (30 m)",    indices: ["NDVI","EVI","NDWI","NBR","NDBI","BSI","SAVI","NDMI","GNDVI"] },
-  { v: "modis",     t: "MODIS (250 m)",     indices: ["NDVI","EVI","NDVI_Daily","EVI_Daily","NDWI","NBR","NDMI","VHI"] },
-  { v: "climate",   t: "Climate / CHIRPS",  indices: ["SPI"] },
+  { v: "sentinel2", t: "Sentinel-2 (10 m)", indices: [
+    "NDVI","EVI","EVI2","NDWI","NBR","NDBI","NDCI","GNDVI","NDRE","MNDWI",
+    "NDMI","NDSI","SAVI","MSAVI","ARVI","GOSAVI","OSAVI","MCARI","MSI","BSI","SIPI",
+  ]},
+  { v: "landsat",   t: "Landsat (30 m)",    indices: [
+    "NDVI","EVI","GNDVI","NDWI","NBR","NDBI","NDMI","NDSI","NDGI",
+    "SAVI","ARVI","AVI","GCI","MSI","BSI","SIPI",
+  ]},
+  { v: "modis",     t: "MODIS (250 m)",     indices: [
+    "NDVI","EVI","NDVI_Daily","EVI_Daily","NDWI","NBR","NDMI","NDSI","VHI",
+  ]},
+  { v: "climate",   t: "CHIRPS",            indices: [
+    "SPI","mean_rf","total_rf","anomaly_rf","dry_days","max_rf",
+  ]},
 ];
 
 // Dataset-scoped display labels — only applied when that dataset is selected,
@@ -581,6 +591,14 @@ const INDEX_LABELS = {
     NDVI_Daily: "NDVI Daily",
     EVI_Daily:  "EVI Daily",
     VHI:        "VHI (Vegetation Health Index)",
+  },
+  climate: {
+    SPI:        "SPI (Standardized Precipitation Index)",
+    mean_rf:    "Mean RF (Mean Daily Rainfall, mm/day)",
+    total_rf:   "Total RF (Total Rainfall, mm)",
+    anomaly_rf: "Rainfall Anomaly (vs 1981–2010 mean)",
+    dry_days:   "Dry Days (days < 1 mm)",
+    max_rf:     "Max Daily RF (Peak Rainfall, mm)",
   },
 };
 const ANALYSIS_MONTHS = [
@@ -740,7 +758,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
-                <select value={mo} onChange={e => setMo(e.target.value)} style={{ ...iSt, flex: "0 0 56px" }}>
+                <select value={mo} onChange={e => setMo(e.target.value)} style={{ ...iSt, flex: "0 0 66px" }}>
                   {ANALYSIS_MONTHS.map(m => <option key={m.v} value={m.v}>{m.t}</option>)}
                 </select>
                 <select value={yr} onChange={e => setYr(e.target.value)} style={{ ...iSt, flex: "0 0 76px" }}>
