@@ -568,16 +568,20 @@ function StatsModal({ aoi, step, stats, error, selectedCategory, onPickCategory,
 const ANALYSIS_DATASETS = [
   { v: "sentinel2", t: "Sentinel-2 (10 m)", indices: ["NDVI","EVI","NDWI","NBR","NDBI","MNDWI","BSI","SAVI","NDMI","GNDVI"] },
   { v: "landsat",   t: "Landsat (30 m)",    indices: ["NDVI","EVI","NDWI","NBR","NDBI","BSI","SAVI","NDMI","GNDVI"] },
-  { v: "modis",     t: "MODIS (250 m)",     indices: ["NDVI","EVI","NDVI_Daily","EVI_Daily","NDWI","NBR","NDMI"] },
-  { v: "climate",   t: "Climate / CHIRPS",  indices: ["VHI","SPI"] },
+  { v: "modis",     t: "MODIS (250 m)",     indices: ["NDVI","EVI","NDVI_Daily","EVI_Daily","NDWI","NBR","NDMI","VHI"] },
+  { v: "climate",   t: "Climate / CHIRPS",  indices: ["SPI"] },
 ];
 
-// Display labels for indices whose key differs from what users should see
+// Dataset-scoped display labels — only applied when that dataset is selected,
+// so "16-day Composite" doesn't bleed onto Sentinel-2 / Landsat NDVI/EVI.
 const INDEX_LABELS = {
-  NDVI:       "NDVI (16-day Composite)",
-  EVI:        "EVI (16-day Composite)",
-  NDVI_Daily: "NDVI Daily",
-  EVI_Daily:  "EVI Daily",
+  modis: {
+    NDVI:       "NDVI (16-day Composite)",
+    EVI:        "EVI (16-day Composite)",
+    NDVI_Daily: "NDVI Daily",
+    EVI_Daily:  "EVI Daily",
+    VHI:        "VHI (Vegetation Health Index)",
+  },
 };
 const ANALYSIS_MONTHS = [
   {v:"01",t:"Jan"},{v:"02",t:"Feb"},{v:"03",t:"Mar"},{v:"04",t:"Apr"},
@@ -720,7 +724,7 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
           <div>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>Index</div>
             <select value={index} onChange={e => setIndex(e.target.value)} style={iSt}>
-              {indexOptions.map(ix => <option key={ix} value={ix}>{INDEX_LABELS[ix] || ix}</option>)}
+              {indexOptions.map(ix => <option key={ix} value={ix}>{(INDEX_LABELS[dataset] || {})[ix] || ix}</option>)}
             </select>
           </div>
         </div>
@@ -731,15 +735,15 @@ function AnalysisModal({ aoi, onClose, onViewOnMap, initialDataset, initialIndex
             <div key={label}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 5 }}>{label}</div>
               <div style={{ display: "flex", gap: 4 }}>
-                <select value={dy} onChange={e => setDy(e.target.value)} style={{ ...iSt, flex: "0 0 52px" }}>
+                <select value={dy} onChange={e => setDy(e.target.value)} style={{ ...iSt, flex: "0 0 58px" }}>
                   {Array.from({length: 31}, (_, i) => String(i + 1).padStart(2, "0")).map(d => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
-                <select value={mo} onChange={e => setMo(e.target.value)} style={{ ...iSt, flex: 1 }}>
+                <select value={mo} onChange={e => setMo(e.target.value)} style={{ ...iSt, flex: "0 0 56px" }}>
                   {ANALYSIS_MONTHS.map(m => <option key={m.v} value={m.v}>{m.t}</option>)}
                 </select>
-                <select value={yr} onChange={e => setYr(e.target.value)} style={{ ...iSt, flex: "0 0 68px" }}>
+                <select value={yr} onChange={e => setYr(e.target.value)} style={{ ...iSt, flex: "0 0 76px" }}>
                   {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
                 </select>
               </div>
